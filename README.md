@@ -1,0 +1,1 @@
+# safecore-installer
