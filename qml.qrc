@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>safespace_global_ops.qml</file>
+        <file>AppButton.qml</file>
+        <file>AppCard.qml</file>
+        <file>PathPicker.qml</file>
+        <file>StepRow.qml</file>
+    </qresource>
+    <qresource prefix="/pages"/>
+</RCC>
