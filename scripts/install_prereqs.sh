@@ -35,23 +35,55 @@ wait_for_apt() {
 echo -e "\n${GREEN}[1/2] Checking Docker...${NC}"
 if ! docker --version >/dev/null 2>&1; then
   echo "Installing Docker..."
-  echo "Downloading Docker install script..."
   
+  # Fix any broken apt sources that might cause issues
+  echo "Checking for problematic apt repositories..."
+  
+  # Temporarily disable unsigned/problematic local repos
+  if [ -d /etc/apt/sources.list.d ]; then
+    for repo in /etc/apt/sources.list.d/*.list; do
+      if [ -f "$repo" ] && grep -q "file:/var/nvidia-driver-local" "$repo" 2>/dev/null; then
+        echo "Temporarily disabling problematic repo: $repo"
+        mv "$repo" "$repo.disabled" 2>/dev/null || true
+      fi
+    done
+  fi
+  
+  echo "Downloading Docker install script..."
   if ! curl -fsSL https://get.docker.com -o /tmp/get-docker.sh; then
     echo -e "${RED}Failed to download Docker install script${NC}"
     INSTALL_FAILED=true
   else
     echo "Running Docker install script..."
     wait_for_apt
+    
+    # Run Docker install script
     if ! sh /tmp/get-docker.sh; then
-      echo -e "${RED}Docker installation failed${NC}"
-      INSTALL_FAILED=true
+      echo -e "${YELLOW}Docker install script had issues, checking if Docker was installed...${NC}"
+      # Check if Docker was actually installed despite the error
+      if docker --version >/dev/null 2>&1; then
+        echo -e "${GREEN}Docker was installed successfully despite warnings.${NC}"
+        usermod -aG docker "$TARGET_USER" || true
+        DOCKER_INSTALLED=true
+      else
+        echo -e "${RED}Docker installation failed${NC}"
+        INSTALL_FAILED=true
+      fi
     else
       usermod -aG docker "$TARGET_USER" || true
       DOCKER_INSTALLED=true
       echo -e "${GREEN}Docker installed successfully.${NC}"
     fi
     rm -f /tmp/get-docker.sh
+  fi
+  
+  # Re-enable any disabled repos
+  if [ -d /etc/apt/sources.list.d ]; then
+    for repo in /etc/apt/sources.list.d/*.list.disabled; do
+      if [ -f "$repo" ]; then
+        mv "$repo" "${repo%.disabled}" 2>/dev/null || true
+      fi
+    done
   fi
 else
   echo "Docker already installed: $(docker --version)"
