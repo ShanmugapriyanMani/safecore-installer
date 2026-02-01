@@ -8,12 +8,15 @@ NC='\033[0m'
 TARGET_UID=${PKEXEC_UID:-0}
 TARGET_USER=$(id -un "$TARGET_UID" 2>/dev/null || echo root)
 
+DOCKER_INSTALLED=false
+
 echo -e "\n${GREEN}[1/2] Checking Docker...${NC}"
-if ! command -v docker >/dev/null 2>&1; then
+if ! docker --version >/dev/null 2>&1; then
   echo "Installing Docker..."
   curl -fsSL https://get.docker.com | sh
   usermod -aG docker "$TARGET_USER" || true
-  echo -e "${YELLOW}Docker installed. You may need to logout/login for group changes.${NC}"
+  DOCKER_INSTALLED=true
+  echo "Docker installed."
 else
   echo "Docker already installed: $(docker --version)"
 fi
@@ -27,12 +30,13 @@ if ! dpkg -l | grep -q nvidia-container-toolkit; then
     tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null
   apt-get update
   apt-get install -y nvidia-container-toolkit
-  systemctl restart docker
   echo "NVIDIA Container Toolkit installed."
 else
   echo "NVIDIA Container Toolkit already installed."
 fi
 
-echo -e "\n${YELLOW}Applying docker group changes...${NC}"
-newgrp docker || true
-echo -e "${YELLOW}If docker permission is still denied, logout/login or run 'newgrp docker' in your terminal and relaunch the app.${NC}"
+if [ "$DOCKER_INSTALLED" = true ] || ! dpkg -l | grep -q nvidia-container-toolkit-base 2>/dev/null; then
+  echo -e "\n${YELLOW}Restarting Docker service...${NC}"
+  systemctl restart docker
+  echo "Docker service restarted."
+fi

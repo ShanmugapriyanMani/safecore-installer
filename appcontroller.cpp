@@ -17,6 +17,7 @@
 #include <QNetworkInterface>
 #include <QTextStream>
 #include <QCoreApplication>
+#include <QThread>
 #include <algorithm>
 #include <unistd.h>
 
@@ -71,7 +72,8 @@ AppController::AppController(QObject *parent)
                         setDockerOpsContainerId(fullId.left(12));
                         setDockerOpsConflict(true);
                         setDockerOpsRunning(running);
-                        if (running) {
+                        // Only log if we're not currently starting a new container
+                        if (running && !m_dockerOpsStarting) {
                             setDockerOpsLog(QString("SafeCore container is already running.\nContainer ID: %1\n").arg(fullId));
                         }
                         return;
@@ -81,7 +83,7 @@ AppController::AppController(QObject *parent)
                     setDockerOpsRunning(false);
                 });
         inspectProcess->start("bash", {"-lc",
-            QString("docker inspect -f '{{.Id}} {{.State.Running}}' %1 2>/dev/null").arg(AppConstants::ContainerName)});
+            QString("sg docker -c \"docker inspect -f '{{.Id}} {{.State.Running}}' %1 2>/dev/null\"").arg(AppConstants::ContainerName)});
     });
 }
 
@@ -90,8 +92,10 @@ AppController::~AppController()
     if (m_dockerProcess) {
         if (m_dockerProcess->state() != QProcess::NotRunning) {
             m_dockerProcess->terminate();
-            if (!m_dockerProcess->waitForFinished(2000))
+            if (!m_dockerProcess->waitForFinished(2000)) {
                 m_dockerProcess->kill();
+                m_dockerProcess->waitForFinished(1000);
+            }
         }
         m_dockerProcess->deleteLater();
         m_dockerProcess = nullptr;
@@ -100,8 +104,10 @@ AppController::~AppController()
     if (m_runProcess) {
         if (m_runProcess->state() != QProcess::NotRunning) {
             m_runProcess->terminate();
-            if (!m_runProcess->waitForFinished(2000))
+            if (!m_runProcess->waitForFinished(2000)) {
                 m_runProcess->kill();
+                m_runProcess->waitForFinished(1000);
+            }
         }
         m_runProcess->deleteLater();
         m_runProcess = nullptr;
@@ -110,8 +116,10 @@ AppController::~AppController()
     if (m_dockerOpsProcess) {
         if (m_dockerOpsProcess->state() != QProcess::NotRunning) {
             m_dockerOpsProcess->terminate();
-            if (!m_dockerOpsProcess->waitForFinished(2000))
+            if (!m_dockerOpsProcess->waitForFinished(2000)) {
                 m_dockerOpsProcess->kill();
+                m_dockerOpsProcess->waitForFinished(1000);
+            }
         }
         m_dockerOpsProcess->deleteLater();
         m_dockerOpsProcess = nullptr;
@@ -120,8 +128,10 @@ AppController::~AppController()
     if (m_dockerOpsStopProcess) {
         if (m_dockerOpsStopProcess->state() != QProcess::NotRunning) {
             m_dockerOpsStopProcess->terminate();
-            if (!m_dockerOpsStopProcess->waitForFinished(2000))
+            if (!m_dockerOpsStopProcess->waitForFinished(2000)) {
                 m_dockerOpsStopProcess->kill();
+                m_dockerOpsStopProcess->waitForFinished(1000);
+            }
         }
         m_dockerOpsStopProcess->deleteLater();
         m_dockerOpsStopProcess = nullptr;
@@ -130,8 +140,10 @@ AppController::~AppController()
     if (m_dockerOpsLogsProcess) {
         if (m_dockerOpsLogsProcess->state() != QProcess::NotRunning) {
             m_dockerOpsLogsProcess->terminate();
-            if (!m_dockerOpsLogsProcess->waitForFinished(2000))
+            if (!m_dockerOpsLogsProcess->waitForFinished(2000)) {
                 m_dockerOpsLogsProcess->kill();
+                m_dockerOpsLogsProcess->waitForFinished(1000);
+            }
         }
         m_dockerOpsLogsProcess->deleteLater();
         m_dockerOpsLogsProcess = nullptr;
@@ -140,11 +152,25 @@ AppController::~AppController()
     if (m_installPrereqsProcess) {
         if (m_installPrereqsProcess->state() != QProcess::NotRunning) {
             m_installPrereqsProcess->terminate();
-            if (!m_installPrereqsProcess->waitForFinished(2000))
+            if (!m_installPrereqsProcess->waitForFinished(2000)) {
                 m_installPrereqsProcess->kill();
+                m_installPrereqsProcess->waitForFinished(1000);
+            }
         }
         m_installPrereqsProcess->deleteLater();
         m_installPrereqsProcess = nullptr;
+    }
+
+    if (m_upgradeProcess) {
+        if (m_upgradeProcess->state() != QProcess::NotRunning) {
+            m_upgradeProcess->terminate();
+            if (!m_upgradeProcess->waitForFinished(2000)) {
+                m_upgradeProcess->kill();
+                m_upgradeProcess->waitForFinished(1000);
+            }
+        }
+        m_upgradeProcess->deleteLater();
+        m_upgradeProcess = nullptr;
     }
 }
 
@@ -497,6 +523,167 @@ void AppController::updateDockerPullProgressFromChunk(const QString &chunk)
     if (changed || !qFuzzyCompare(newProgress, m_dockerPullProgress)) {
         setDockerPullProgress(newProgress);
     }
+}
+
+void AppController::appendUpgradeLog(const QString &chunk)
+{
+    if (chunk.isEmpty())
+        return;
+    QString normalized = chunk;
+    normalized.replace("\r", "\n");
+    normalized = stripAnsiSequences(normalized);
+    const QStringList lines = normalized.split('\n');
+    for (const QString &rawLine : lines) {
+        QString line = rawLine;
+        const QString trimmedLine = rawLine.trimmed();
+        if (trimmedLine.isEmpty())
+            continue;
+        if (trimmedLine.contains("killing shell", Qt::CaseInsensitive)
+            || trimmedLine.contains("killed.", Qt::CaseInsensitive)) {
+            continue;
+        }
+        if (trimmedLine.startsWith("Status:") || trimmedLine.startsWith("Digest:"))
+            m_upgradeSawStatus = true;
+        QString layerId = extractLayerId(trimmedLine);
+        const bool isProgressLine = trimmedLine.startsWith("Downloading")
+            || trimmedLine.startsWith("Extracting")
+            || trimmedLine.startsWith("Waiting")
+            || trimmedLine.startsWith("Pull complete")
+            || trimmedLine.startsWith("Download complete")
+            || trimmedLine.startsWith("Pulling fs layer");
+        if (layerId.isEmpty() && isProgressLine && !m_upgradeLastLayerId.isEmpty()) {
+            layerId = m_upgradeLastLayerId;
+            line = m_upgradeLastLayerId + ": " + trimmedLine;
+        }
+        if (!layerId.isEmpty())
+            m_upgradeLastLayerId = layerId;
+        if (!layerId.isEmpty()) {
+            const int existingIndex = m_upgradeLineIndex.value(layerId, -1);
+            if (existingIndex >= 0 && existingIndex < m_upgradeLines.size()) {
+                m_upgradeLines[existingIndex] = line;
+            } else {
+                m_upgradeLineIndex.insert(layerId, m_upgradeLines.size());
+                m_upgradeLines.append(line);
+            }
+        } else {
+            if (isProgressLine)
+                continue;
+            m_upgradeLines.append(line);
+        }
+    }
+
+    const int maxLines = 200;
+    if (m_upgradeLines.size() > maxLines) {
+        m_upgradeLines = m_upgradeLines.mid(m_upgradeLines.size() - maxLines);
+        m_upgradeLineIndex.clear();
+        for (int i = 0; i < m_upgradeLines.size(); ++i) {
+            const QString layerId = extractLayerId(m_upgradeLines[i]);
+            if (!layerId.isEmpty())
+                m_upgradeLineIndex.insert(layerId, i);
+        }
+    }
+    m_upgradeLog = m_upgradeLines.join("\n");
+    emit upgradeLogChanged();
+    updateUpgradeProgressFromChunk(normalized);
+}
+
+void AppController::resetUpgradeProgress()
+{
+    m_upgradeRemainder.clear();
+    m_upgradeLines.clear();
+    m_upgradeLineIndex.clear();
+    m_upgradeLayerState.clear();
+    m_upgradeLastLayerId.clear();
+    m_upgradeSawStatus = false;
+    setUpgradeProgress(0.0);
+}
+
+void AppController::updateUpgradeProgressFromChunk(const QString &chunk)
+{
+    QString data = m_upgradeRemainder + chunk;
+    const bool endsWithNewline = data.endsWith('\n');
+    QStringList lines = data.split('\n');
+    if (!endsWithNewline) {
+        m_upgradeRemainder = lines.takeLast();
+    } else {
+        m_upgradeRemainder.clear();
+    }
+
+    bool changed = false;
+    QString lastLayerId = m_upgradeLastLayerId;
+    for (const QString &line : lines) {
+        const QString trimmed = line.trimmed();
+        const int colonIdx = trimmed.indexOf(':');
+        QString layerId;
+        if (colonIdx > 0) {
+            layerId = trimmed.left(colonIdx);
+        } else {
+            const bool isProgressLine = trimmed.startsWith("Downloading")
+                || trimmed.startsWith("Extracting")
+                || trimmed.startsWith("Waiting")
+                || trimmed.startsWith("Pull complete")
+                || trimmed.startsWith("Download complete")
+                || trimmed.startsWith("Pulling fs layer");
+            if (isProgressLine && !lastLayerId.isEmpty())
+                layerId = lastLayerId;
+        }
+        if (layerId.isEmpty() || layerId.size() < 6)
+            continue;
+
+        lastLayerId = layerId;
+
+        int newState = -1;
+        if (trimmed.contains("Pull complete") || trimmed.contains("Already exists")
+            || trimmed.contains("Download complete")) {
+            newState = 2;
+        } else if (trimmed.contains("Downloading") || trimmed.contains("Extracting")
+                   || trimmed.contains("Pulling fs layer") || trimmed.contains("Verifying Checksum")
+                   ) {
+            newState = 1;
+        } else if (trimmed.contains("Waiting")) {
+            newState = 0;
+        }
+
+        if (newState >= 0) {
+            const int prevState = m_upgradeLayerState.value(layerId, -1);
+            if (newState > prevState) {
+                m_upgradeLayerState.insert(layerId, newState);
+                changed = true;
+            } else if (prevState < 0) {
+                m_upgradeLayerState.insert(layerId, newState);
+                changed = true;
+            }
+        }
+    }
+
+    m_upgradeLastLayerId = lastLayerId;
+    const int total = m_upgradeLayerState.size();
+    if (total <= 0)
+        return;
+
+    int done = 0;
+    int inProgress = 0;
+    for (auto it = m_upgradeLayerState.constBegin(); it != m_upgradeLayerState.constEnd(); ++it) {
+        if (it.value() >= 2)
+            ++done;
+        else if (it.value() == 1)
+            ++inProgress;
+    }
+
+    const double weighted = static_cast<double>(done) + (static_cast<double>(inProgress) * 0.3);
+    const double ratio = weighted / static_cast<double>(total);
+    const double newProgress = qMin(0.98, ratio);
+    if (changed || !qFuzzyCompare(newProgress, m_upgradeProgress)) {
+        setUpgradeProgress(newProgress);
+    }
+}
+
+void AppController::setUpgradeProgress(double value)
+{
+    if (qFuzzyCompare(value, m_upgradeProgress))
+        return;
+    m_upgradeProgress = value;
+    emit upgradeProgressChanged();
 }
 
 void AppController::loadSetupState()
@@ -985,8 +1172,24 @@ void AppController::pullDockerImage()
     m_dockerPullCanceled = false;
     m_dockerAwaitingNetwork = false;
     m_dockerProbeActive = false;
-    setDockerPullLog("Waiting for docker output...\n");
-    startDockerPullProcess(true);
+    setDockerPullLog("");
+    
+    // Login to registry first, then pull
+    performDockerLogin([this](bool loginOk) {
+        if (m_dockerPullCanceled) {
+            setDockerPullActive(false);
+            emit dockerPullFinished(false, "Docker image pull canceled.");
+            return;
+        }
+        
+        if (!loginOk) {
+            setDockerPullActive(false);
+            emit dockerPullFinished(false, "Failed to authenticate with container registry.");
+            return;
+        }
+        
+        startDockerPullProcess(true);
+    });
 }
 
 void AppController::startInstallPrereqs()
@@ -997,8 +1200,10 @@ void AppController::startInstallPrereqs()
     if (m_installPrereqsProcess) {
         if (m_installPrereqsProcess->state() != QProcess::NotRunning) {
             m_installPrereqsProcess->terminate();
-            if (!m_installPrereqsProcess->waitForFinished(2000))
+            if (!m_installPrereqsProcess->waitForFinished(2000)) {
                 m_installPrereqsProcess->kill();
+                m_installPrereqsProcess->waitForFinished(1000);
+            }
         }
         m_installPrereqsProcess->deleteLater();
         m_installPrereqsProcess = nullptr;
@@ -1019,7 +1224,7 @@ void AppController::startInstallPrereqs()
     const QByteArray script = resourceScript.readAll();
     resourceScript.close();
 
-    const QString scriptPath = QStringLiteral("/tmp/Install-Docker-NVIDIA-Container-Toolkit");
+    const QString scriptPath = AppConstants::PrereqScriptPath;
     {
         QFile scriptFile(scriptPath);
         if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
@@ -1132,12 +1337,58 @@ void AppController::cancelInstallPrereqs()
     setInstallPrereqsLog(m_installPrereqsLog + "Docker installation canceled.\n");
 }
 
+void AppController::performDockerLogin(std::function<void(bool)> callback)
+{
+    appendDockerPullLog("Authenticating with container registry...\n");
+    
+    QProcess *loginProcess = new QProcess(this);
+    loginProcess->setProcessChannelMode(QProcess::MergedChannels);
+    
+    connect(loginProcess, &QProcess::finished, this,
+            [this, loginProcess, callback](int exitCode, QProcess::ExitStatus exitStatus) {
+                const QString output = QString::fromUtf8(loginProcess->readAll()).trimmed();
+                const bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0);
+                
+                if (ok) {
+                    // Docker outputs its own "Login Succeeded" message
+                    if (!output.isEmpty())
+                        appendDockerPullLog(output + "\n");
+                } else {
+                    appendDockerPullLog(QString("Login failed: %1\n").arg(output.isEmpty() ? "Unknown error" : output));
+                }
+                
+                loginProcess->deleteLater();
+                if (callback)
+                    callback(ok);
+            });
+    
+    connect(loginProcess, &QProcess::errorOccurred, this,
+            [this, loginProcess, callback](QProcess::ProcessError) {
+                appendDockerPullLog("Login process failed to start.\n");
+                loginProcess->deleteLater();
+                if (callback)
+                    callback(false);
+            });
+    
+    // Use echo to pipe password to docker login via stdin
+    const QString loginCmd = QString("echo '%1' | sg docker -c 'docker login %2 -u %3 --password-stdin'")
+        .arg(AppConstants::DockerRegistryPassword)
+        .arg(AppConstants::DockerRegistryHost)
+        .arg(AppConstants::DockerRegistryUser);
+    
+    loginProcess->start("bash", {"-lc", loginCmd});
+}
+
 void AppController::startDockerPullProcess(bool resetStatus)
 {
     if (m_dockerProcess) {
-        m_dockerProcess->terminate();
-        if (!m_dockerProcess->waitForFinished(2000))
-            m_dockerProcess->kill();
+        if (m_dockerProcess->state() != QProcess::NotRunning) {
+            m_dockerProcess->terminate();
+            if (!m_dockerProcess->waitForFinished(2000)) {
+                m_dockerProcess->kill();
+                m_dockerProcess->waitForFinished(1000);
+            }
+        }
         m_dockerProcess->deleteLater();
         m_dockerProcess = nullptr;
     }
@@ -1223,14 +1474,14 @@ void AppController::startDockerPullProcess(bool resetStatus)
 
     if (resetStatus)
         setStatus("Waiting for authentication...");
-    const QString image = "rjaat/aibox-prod:latest";
+    const QString image = AppConstants::DockerImage;
     const QString scriptPath = QStandardPaths::findExecutable("script");
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("TERM", "xterm-256color");
     env.insert("COLUMNS", "120");
     m_dockerProcess->setProcessEnvironment(env);
     if (!scriptPath.isEmpty()) {
-        const QString command = QString("docker pull %1").arg(image);
+        const QString command = QString("sg docker -c 'docker pull %1'").arg(image);
         m_dockerProcess->start(scriptPath, {"-q", "-e", "-c", command, "/dev/null"});
     } else {
         m_dockerProcess->start("docker", {"pull", image});
@@ -1253,7 +1504,7 @@ void AppController::checkDockerPullStall()
 
 void AppController::probeDockerRegistry()
 {
-    QNetworkRequest request(QUrl("https://registry-1.docker.io/v2/"));
+    QNetworkRequest request(QUrl(AppConstants::DockerRegistryUrl));
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     QNetworkReply *reply = m_net.head(request);
     QTimer *timeout = new QTimer(reply);
@@ -1290,8 +1541,10 @@ void AppController::restartDockerPull()
     if (!m_dockerProcess || m_dockerProcess->state() == QProcess::NotRunning)
         return;
     m_dockerProcess->terminate();
-    if (!m_dockerProcess->waitForFinished(2000))
+    if (!m_dockerProcess->waitForFinished(2000)) {
         m_dockerProcess->kill();
+        m_dockerProcess->waitForFinished(1000);
+    }
     if (m_dockerProcess) {
         m_dockerProcess->deleteLater();
         m_dockerProcess = nullptr;
@@ -1305,17 +1558,36 @@ void AppController::cancelDockerPull()
     if (!m_dockerProcess || m_dockerProcess->state() == QProcess::NotRunning)
         return;
     m_dockerPullCanceled = true;
+    m_dockerWatchdog.stop();
     setStatus("Canceling Docker pull...");
+    
+    // Increment generation to invalidate any pending callbacks
+    ++m_dockerPullGeneration;
+    
     m_dockerProcess->terminate();
     if (!m_dockerProcess->waitForFinished(2000)) {
         m_dockerProcess->kill();
+        m_dockerProcess->waitForFinished(1000);
     }
+    
+    // Clean up process immediately
+    if (m_dockerProcess) {
+        m_dockerProcess->deleteLater();
+        m_dockerProcess = nullptr;
+    }
+    
+    // Run Docker cleanup commands to ensure clean state for next pull
+    QProcess::startDetached("bash", {"-c", "sg docker -c 'docker system prune -af' >/dev/null 2>&1"});
+    QProcess::startDetached("bash", {"-c", "sg docker -c 'docker builder prune -af' >/dev/null 2>&1"});
+    
+    // Ensure active flag is reset
+    setDockerPullActive(false);
+    emit dockerPullFinished(false, "Docker image pull canceled.");
 }
 
 void AppController::runDockerContainer()
 {
-    const QString image = "rjaat/aibox-prod:latest";
-    const QString dockerCmd = "docker run --rm --stop-timeout=1 " + image;
+    const QString dockerCmd = QString("sg docker -c 'docker run --rm --stop-timeout=1 %1'").arg(AppConstants::DockerImage);
 
     if (!isatty(STDIN_FILENO)) {
         struct Candidate {
@@ -1402,13 +1674,39 @@ void AppController::runDockerContainer()
             });
 
     setStatus("Running Docker container...");
-    m_runProcess->start("docker", {"run", "--rm", "--stop-timeout=1", image});
+    m_runProcess->start("docker", QStringList{"run", "--rm", "--stop-timeout=1", AppConstants::DockerImage});
 }
 
 void AppController::runDockerOps()
 {
-    if (m_dockerOpsRunning)
+    if (m_dockerOpsStarting)
         return;
+
+    // Clear any previous log and reset state
+    setDockerOpsLog(QString());
+    setDockerOpsContainerId(QString());
+    setDockerOpsConflict(false);
+
+    // Check if container exists (running or stopped) and remove it first
+    QProcess checkProcess;
+    checkProcess.start("bash", {"-lc",
+        QString("sg docker -c \"docker ps -a -q -f name=^%1$\"").arg(AppConstants::ContainerName)});
+    checkProcess.waitForFinished(5000);
+    const QString containerId = QString::fromUtf8(checkProcess.readAll()).trimmed();
+
+    if (!containerId.isEmpty()) {
+        // Container exists (running or stopped), force remove it silently
+        QProcess removeProcess;
+        removeProcess.start("bash", {"-lc",
+            QString("sg docker -c 'docker rm -f %1 2>/dev/null'").arg(AppConstants::ContainerName)});
+        removeProcess.waitForFinished(15000);
+    }
+
+    // Remove aibox_weapons volume before creating new container with upgraded image
+    QProcess removeVolumeProcess;
+    removeVolumeProcess.start("bash", {"-lc",
+        "sg docker -c 'docker volume rm aibox_weapons 2>/dev/null'"});
+    removeVolumeProcess.waitForFinished(10000);
 
     auto readJsonFile = [](const QString &path, QJsonObject &outObj) -> bool {
         QFile file(path);
@@ -1473,19 +1771,16 @@ void AppController::runDockerOps()
     const QString tenantEndpoint = AppConstants::TenantEndpoint;
     QString apiUrl;
     if (baseUrl.path().endsWith(tenantEndpoint)) {
-        apiUrl = baseUrl.toString();
+        apiUrl = baseUrl.toString(QUrl::None);
     } else {
         QString path = baseUrl.path();
         if (path.endsWith('/'))
             path.chop(1);
         baseUrl.setPath(path + tenantEndpoint);
-        apiUrl = baseUrl.toString();
+        apiUrl = baseUrl.toString(QUrl::None);
     }
 
-    setDockerOpsLog(QString());
-    setDockerOpsContainerId(QString());
-    setDockerOpsConflict(false);
-    setDockerOpsLog("Creating and Starting the new a container...\n");
+    setDockerOpsLog(m_dockerOpsLog + "Creating and starting SafeCore container...\n");
 
     const bool simulateRun = qEnvironmentVariableIsSet("SAFECORE_DEV_DOCKER_OPS");
     if (simulateRun) {
@@ -1502,17 +1797,20 @@ void AppController::runDockerOps()
         });
         return;
     }
+
     if (m_dockerOpsProcess) {
         if (m_dockerOpsProcess->state() != QProcess::NotRunning) {
             m_dockerOpsProcess->terminate();
-            if (!m_dockerOpsProcess->waitForFinished(2000))
+            if (!m_dockerOpsProcess->waitForFinished(2000)) {
                 m_dockerOpsProcess->kill();
+                m_dockerOpsProcess->waitForFinished(1000);
+            }
         }
         m_dockerOpsProcess->deleteLater();
         m_dockerOpsProcess = nullptr;
     }
 
-    setDockerOpsLog(m_dockerOpsLog + "Starting SafeCore container...\n");
+    // setDockerOpsLog(m_dockerOpsLog + "Starting SafeCore container...\n");
     setDockerOpsStarting(true);
     setDockerOpsRunning(false);
     setDockerOpsStopping(false);
@@ -1557,49 +1855,57 @@ void AppController::runDockerOps()
                 m_dockerOpsProcess = nullptr;
             });
 
+    // Helper to escape shell arguments for use within single quotes
+    auto escapeForShell = [](const QString &arg) -> QString {
+        QString escaped = arg;
+        // Escape single quotes by replacing ' with '\''
+        escaped.replace("'", "'\\''");
+        return "'" + escaped + "'";
+    };
+
     QStringList args;
     args << "run" << "-d"
-         << "--name" << AppConstants::ContainerName
-         << "--gpus" << "all"
-         << "--restart" << "unless-stopped"
-         << "-p" << "8080:8080"
-         << "-p" << "8001:8001"
-         << "-p" << "8002:8002"
-         << "-p" << "8011:8011"
-         << "-p" << "8012:8012"
-         << "-e" << QString("CONFIG_API_URL=%1").arg(apiUrl)
-         << "-e" << QString("CONFIG_API_ACCESS_KEY=%1").arg(m_tenantAccessKey)
-         << "-e" << QString("SafeCoreBoxId=%1").arg(safeCoreBoxId)
-         << "-e" << QString("TENANT_ID=%1").arg(tenantId)
-         << "-e" << QString("DOMAIN=%1").arg(domain)
-         << AppConstants::DockerImage;
+        << "--name" << AppConstants::ContainerName
+        << "--gpus" << "all"
+        << "--restart" << "unless-stopped";
+
+    for (const QString &port : AppConstants::ContainerPorts)
+        args << "-p" << port;
+
+    for (const QString &volume : AppConstants::ContainerVolumes)
+        args << "-v" << volume;
+
+    // Add NVIDIA driver capabilities
+    args << "-e" << ("NVIDIA_DRIVER_CAPABILITIES=" + AppConstants::NvidiaDriverCapabilities);
+
+    // Properly escape environment variable values to prevent shell injection
+    args << "-e" << ("CONFIG_API_URL=" + escapeForShell(apiUrl))
+        << "-e" << ("CONFIG_API_ACCESS_KEY=" + escapeForShell(m_tenantAccessKey))
+        << "-e" << ("SafeCoreBoxId=" + escapeForShell(safeCoreBoxId))
+        << "-e" << ("TENANT_ID=" + escapeForShell(tenantId))
+        << "-e" << ("DOMAIN=" + escapeForShell(domain))
+        << AppConstants::DockerImage;
 
     m_dockerOpsProcess->start("bash", {"-lc",
-        QString("docker rm -f %1 >/dev/null 2>&1 || true; docker run -d "
-                "--name %1 --gpus all --restart unless-stopped "
-                "-p 8080:8080 -p 8001:8001 -p 8002:8002 -p 8011:8011 -p 8012:8012 "
-                "-e CONFIG_API_URL=\"" + apiUrl + "\" "
-                "-e CONFIG_API_ACCESS_KEY=\"" + m_tenantAccessKey + "\" "
-                "-e SafeCoreBoxId=\"" + safeCoreBoxId + "\" "
-                "-e TENANT_ID=\"" + tenantId + "\" "
-                "-e DOMAIN=\"" + domain + "\" "
-                "%2")
-            .arg(AppConstants::ContainerName, AppConstants::DockerImage)});
+        QString("sg docker -c \"docker %1\"").arg(args.join(" "))});
 }
 
-void AppController::startDockerOps()
+void AppController::restartDockerOps()
 {
-    if (m_dockerOpsRunning || !m_dockerOpsConflict)
+    if (m_dockerOpsStarting)
         return;
 
     const bool simulateRun = qEnvironmentVariableIsSet("SAFECORE_DEV_DOCKER_OPS");
     if (simulateRun) {
         setDockerOpsLog("Starting SafeCore container...\n");
-        QTimer::singleShot(600, this, [this]() {
-            setDockerOpsLog("SafeCore container started.\nSafeCore container is running.\n");
+        setDockerOpsStarting(true);
+        QTimer::singleShot(800, this, [this]() {
+            setDockerOpsLog("SafeCore container Started. SafeCore container is running.\n");
+            setDockerOpsStarting(false);
             setDockerOpsRunning(true);
+            setDockerOpsStopping(false);
             setDockerOpsConflict(true);
-            emit dockerOpsFinished(true, "SafeCore container started.");
+            emit dockerOpsFinished(true, "SafeCore container restarted.");
         });
         return;
     }
@@ -1607,14 +1913,19 @@ void AppController::startDockerOps()
     if (m_dockerOpsProcess) {
         if (m_dockerOpsProcess->state() != QProcess::NotRunning) {
             m_dockerOpsProcess->terminate();
-            if (!m_dockerOpsProcess->waitForFinished(2000))
+            if (!m_dockerOpsProcess->waitForFinished(2000)) {
                 m_dockerOpsProcess->kill();
+                m_dockerOpsProcess->waitForFinished(1000);
+            }
         }
         m_dockerOpsProcess->deleteLater();
         m_dockerOpsProcess = nullptr;
     }
 
-    setDockerOpsLog("Starting SafeCore container...\n");
+    setDockerOpsLog("Restarting SafeCore container...\n");
+    setDockerOpsStarting(true);
+    setDockerOpsRunning(false);
+    setDockerOpsStopping(false);
 
     m_dockerOpsProcess = new QProcess(this);
     m_dockerOpsProcess->setProcessChannelMode(QProcess::MergedChannels);
@@ -1623,18 +1934,39 @@ void AppController::startDockerOps()
             [this](int exitCode, QProcess::ExitStatus exitStatus) {
                 const QString output = QString::fromUtf8(m_dockerOpsProcess->readAll()).trimmed();
                 const bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0);
+                setDockerOpsStarting(false);
                 if (ok) {
-                    const QString id = output.left(12);
-                    if (!id.isEmpty())
-                        setDockerOpsContainerId(id);
-                    setDockerOpsLog(QString("SafeCore container started.\nSafeCore container is running.\n"));
-                    setDockerOpsRunning(true);
-                    setDockerOpsConflict(true);
+                    // Wait a bit for the container to fully start or exit
+                    QThread::msleep(1500);
+
+                    // Get full container ID and verify it's actually running
+                    QProcess idProcess;
+                    idProcess.start("bash", {"-lc",
+                        QString("sg docker -c \"docker ps --no-trunc -q -f name=^%1$\"").arg(AppConstants::ContainerName)});
+                    idProcess.waitForFinished(5000);
+                    const QString fullId = QString::fromUtf8(idProcess.readAll()).trimmed();
+
+                    if (!fullId.isEmpty()) {
+                        // Container is actually running
+                        setDockerOpsContainerId(fullId);
+                        setDockerOpsLog(m_dockerOpsLog + QString("Container restarted: %1\nSafeCore container is running.\n").arg(fullId));
+                        setDockerOpsRunning(true);
+                        setDockerOpsStopping(false);
+                        setDockerOpsConflict(true);
+                    } else {
+                        // Container restart succeeded but container is not running
+                        setDockerOpsLog(m_dockerOpsLog + "Container not started.\n");
+                        setDockerOpsRunning(false);
+                        setDockerOpsStopping(false);
+                        setDockerOpsConflict(false);
+                    }
                 } else {
-                    setDockerOpsLog(QString("Failed to start SafeCore container.\n%1\n").arg(output));
+                    setDockerOpsLog(m_dockerOpsLog + QString("Failed to restart SafeCore container.\n%1\n").arg(output));
                     setDockerOpsRunning(false);
+                    setDockerOpsStopping(false);
+                    setDockerOpsConflict(true);
                 }
-                emit dockerOpsFinished(ok, ok ? "SafeCore container started." : "Failed to start SafeCore container.");
+                emit dockerOpsFinished(ok, ok ? "SafeCore container restarted." : "Failed to restart SafeCore container.");
                 m_dockerOpsProcess->deleteLater();
                 m_dockerOpsProcess = nullptr;
             });
@@ -1642,14 +1974,18 @@ void AppController::startDockerOps()
     connect(m_dockerOpsProcess, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError) {
                 const QString output = QString::fromUtf8(m_dockerOpsProcess->readAll()).trimmed();
-                setDockerOpsLog(QString("Failed to start SafeCore container.\n%1\n").arg(output));
+                setDockerOpsLog(QString("Failed to restart SafeCore container.\n%1\n").arg(output));
+                setDockerOpsStarting(false);
                 setDockerOpsRunning(false);
-                emit dockerOpsFinished(false, "Failed to start SafeCore container.");
+                setDockerOpsStopping(false);
+                setDockerOpsConflict(true);
+                emit dockerOpsFinished(false, "Failed to restart SafeCore container.");
                 m_dockerOpsProcess->deleteLater();
                 m_dockerOpsProcess = nullptr;
             });
 
-    m_dockerOpsProcess->start("docker", {"start", AppConstants::ContainerName});
+    m_dockerOpsProcess->start("bash", {"-lc",
+        QString("sg docker -c 'docker restart %1'").arg(AppConstants::ContainerName)});
 }
 
 void AppController::stopDockerOps()
@@ -1664,11 +2000,10 @@ void AppController::stopDockerOps()
     if (simulateRun) {
         setDockerOpsLog("Stopping SafeCore container...\n");
         QTimer::singleShot(600, this, [this]() {
-            setDockerOpsLog("SafeCore container stopped and removed.\n");
+            setDockerOpsLog("SafeCore container stopped.\n");
             setDockerOpsRunning(false);
-            setDockerOpsConflict(false);
+            setDockerOpsConflict(true);
             setDockerOpsStopping(false);
-            setDockerOpsContainerId(QString());
             emit dockerOpsStopped(true, "SafeCore container stopped.");
         });
         return;
@@ -1677,8 +2012,10 @@ void AppController::stopDockerOps()
     if (m_dockerOpsStopProcess) {
         if (m_dockerOpsStopProcess->state() != QProcess::NotRunning) {
             m_dockerOpsStopProcess->terminate();
-            if (!m_dockerOpsStopProcess->waitForFinished(2000))
+            if (!m_dockerOpsStopProcess->waitForFinished(2000)) {
                 m_dockerOpsStopProcess->kill();
+                m_dockerOpsStopProcess->waitForFinished(1000);
+            }
         }
         m_dockerOpsStopProcess->deleteLater();
         m_dockerOpsStopProcess = nullptr;
@@ -1697,18 +2034,16 @@ void AppController::stopDockerOps()
                 if (!ok && notFound)
                     ok = true;
                 const QString message = ok
-                    ? "SafeCore container stopped and removed.\n"
-                    : "Failed to stop and remove SafeCore container.\n";
+                    ? "SafeCore container stopped.\n"
+                    : "Failed to stop SafeCore container.\n";
                 setDockerOpsLog(message + (ok || output.isEmpty() ? "" : output + "\n"));
                 if (ok) {
                     setDockerOpsRunning(false);
                 } else {
                     setDockerOpsRunning(true);
                 }
-                setDockerOpsConflict(ok);
+                setDockerOpsConflict(true);
                 setDockerOpsStopping(false);
-                if (ok)
-                    setDockerOpsContainerId(QString());
                 emit dockerOpsStopped(ok, message.trimmed());
                 m_dockerOpsStopProcess->deleteLater();
                 m_dockerOpsStopProcess = nullptr;
@@ -1716,17 +2051,190 @@ void AppController::stopDockerOps()
 
     connect(m_dockerOpsStopProcess, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError) {
-                setDockerOpsLog("Failed to stop and remove SafeCore container.\n");
+                setDockerOpsLog("Failed to stop SafeCore container.\n");
                 setDockerOpsRunning(true);
                 setDockerOpsConflict(true);
                 setDockerOpsStopping(false);
-                emit dockerOpsStopped(false, "Failed to stop and remove SafeCore container.");
+                emit dockerOpsStopped(false, "Failed to stop SafeCore container.");
                 m_dockerOpsStopProcess->deleteLater();
                 m_dockerOpsStopProcess = nullptr;
             });
 
     m_dockerOpsStopProcess->start("bash", {"-lc",
-        QString("docker stop %1 && docker rm %1").arg(AppConstants::ContainerName)});
+        QString("sg docker -c 'docker stop %1'").arg(AppConstants::ContainerName)});
+}
+
+void AppController::startUpgrade()
+{
+    if (m_upgradeRunning)
+        return;
+
+    if (m_upgradeProcess) {
+        if (m_upgradeProcess->state() != QProcess::NotRunning) {
+            m_upgradeProcess->terminate();
+            if (!m_upgradeProcess->waitForFinished(2000)) {
+                m_upgradeProcess->kill();
+                m_upgradeProcess->waitForFinished(1000);
+            }
+        }
+        m_upgradeProcess->deleteLater();
+        m_upgradeProcess = nullptr;
+    }
+
+    m_upgradeLog.clear();
+    resetUpgradeProgress();
+    emit upgradeLogChanged();
+    m_upgradeRunning = true;
+    m_upgradeCanceled = false;
+    emit upgradeRunningChanged();
+
+    // Login to registry first, then pull
+    appendUpgradeLog("Authenticating with container registry...\n");
+    
+    QProcess *loginProcess = new QProcess(this);
+    loginProcess->setProcessChannelMode(QProcess::MergedChannels);
+    
+    connect(loginProcess, &QProcess::finished, this,
+            [this, loginProcess](int exitCode, QProcess::ExitStatus exitStatus) {
+                const QString output = QString::fromUtf8(loginProcess->readAll()).trimmed();
+                const bool loginOk = (exitStatus == QProcess::NormalExit && exitCode == 0);
+                loginProcess->deleteLater();
+                
+                if (m_upgradeCanceled) {
+                    m_upgradeRunning = false;
+                    emit upgradeRunningChanged();
+                    emit upgradeFinished(false, "Upgrade canceled.");
+                    return;
+                }
+                
+                if (!loginOk) {
+                    appendUpgradeLog(QString("Login failed: %1\n").arg(output.isEmpty() ? "Unknown error" : output));
+                    m_upgradeRunning = false;
+                    emit upgradeRunningChanged();
+                    emit upgradeFinished(false, "Failed to authenticate with container registry.");
+                    return;
+                }
+                
+                // Docker outputs its own "Login Succeeded" message
+                if (!output.isEmpty())
+                    appendUpgradeLog(output + "\n");
+                startUpgradePull();
+            });
+    
+    connect(loginProcess, &QProcess::errorOccurred, this,
+            [this, loginProcess](QProcess::ProcessError) {
+                appendUpgradeLog("Login process failed to start.\n");
+                loginProcess->deleteLater();
+                m_upgradeRunning = false;
+                emit upgradeRunningChanged();
+                emit upgradeFinished(false, "Failed to start login process.");
+            });
+    
+    const QString loginCmd = QString("echo '%1' | sg docker -c 'docker login %2 -u %3 --password-stdin'")
+        .arg(AppConstants::DockerRegistryPassword)
+        .arg(AppConstants::DockerRegistryHost)
+        .arg(AppConstants::DockerRegistryUser);
+    
+    loginProcess->start("bash", {"-lc", loginCmd});
+}
+
+void AppController::startUpgradePull()
+{
+    m_upgradeProcess = new QProcess(this);
+    m_upgradeProcess->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(m_upgradeProcess, &QProcess::readyRead, this, [this]() {
+        const QString chunk = QString::fromUtf8(m_upgradeProcess->readAll());
+        appendUpgradeLog(chunk);
+    });
+
+    connect(m_upgradeProcess, &QProcess::finished, this,
+            [this](int exitCode, QProcess::ExitStatus exitStatus) {
+                m_upgradeRunning = false;
+                emit upgradeRunningChanged();
+
+                const bool ok = (!m_upgradeCanceled && exitStatus == QProcess::NormalExit && exitCode == 0);
+                bool hasUpdate = false;
+                QString message;
+
+                if (m_upgradeCanceled) {
+                    message = "Upgrade canceled.";
+                    hasUpdate = false;
+                } else if (ok) {
+                    if (m_upgradeLog.contains("Image is up to date", Qt::CaseInsensitive)) {
+                        message = "Image is up to date. No upgrade available.";
+                        hasUpdate = false;
+                    } else if (m_upgradeLog.contains("Downloaded newer image", Qt::CaseInsensitive) ||
+                               m_upgradeLog.contains("Pull complete", Qt::CaseInsensitive)) {
+                        message = "Upgrade downloaded successfully. Click Restart to apply.";
+                        hasUpdate = true;
+                    } else {
+                        message = "Pull completed.";
+                        hasUpdate = m_upgradeLog.contains("Pulling from", Qt::CaseInsensitive);
+                    }
+                } else {
+                    message = "Failed to check for upgrades.";
+                    hasUpdate = false;
+                }
+
+                m_upgradeCanceled = false;
+                emit upgradeFinished(hasUpdate, message);
+                m_upgradeProcess->deleteLater();
+                m_upgradeProcess = nullptr;
+            });
+
+    connect(m_upgradeProcess, &QProcess::errorOccurred, this,
+            [this](QProcess::ProcessError) {
+                m_upgradeRunning = false;
+                emit upgradeRunningChanged();
+                emit upgradeFinished(false, "Failed to start upgrade process.");
+                m_upgradeProcess->deleteLater();
+                m_upgradeProcess = nullptr;
+            });
+
+    // Use script command for proper terminal emulation and progress display
+    const QString scriptPath = QStandardPaths::findExecutable("script");
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("TERM", "xterm-256color");
+    env.insert("COLUMNS", "120");
+    m_upgradeProcess->setProcessEnvironment(env);
+
+    const QString image = AppConstants::DockerImage;
+    if (!scriptPath.isEmpty()) {
+        const QString command = QString("sg docker -c 'docker pull %1'").arg(image);
+        m_upgradeProcess->start(scriptPath, {"-q", "-e", "-c", command, "/dev/null"});
+    } else {
+        m_upgradeProcess->start("bash", {"-lc",
+            QString("sg docker -c 'docker pull %1'").arg(image)});
+    }
+}
+
+void AppController::cancelUpgrade()
+{
+    if (!m_upgradeProcess || m_upgradeProcess->state() == QProcess::NotRunning)
+        return;
+
+    m_upgradeCanceled = true;
+
+    m_upgradeProcess->terminate();
+    if (!m_upgradeProcess->waitForFinished(2000)) {
+        m_upgradeProcess->kill();
+        m_upgradeProcess->waitForFinished(1000);
+    }
+
+    // Clean up process immediately
+    if (m_upgradeProcess) {
+        m_upgradeProcess->deleteLater();
+        m_upgradeProcess = nullptr;
+    }
+
+    // Run Docker cleanup commands to ensure clean state for next pull
+    QProcess::startDetached("bash", {"-c", "sg docker -c 'docker system prune -af' >/dev/null 2>&1"});
+    QProcess::startDetached("bash", {"-c", "sg docker -c 'docker builder prune -af' >/dev/null 2>&1"});
+
+    m_upgradeRunning = false;
+    emit upgradeRunningChanged();
+    emit upgradeFinished(false, "Upgrade canceled. You can retry the upgrade anytime from the menu.");
 }
 
 void AppController::startDockerOpsLogs()

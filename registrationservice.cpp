@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrl>
+#include <QTimer>
 
 namespace {
 QUrl buildEndpointUrl(const QUrl &baseUrl, const QString &endpoint)
@@ -68,7 +69,18 @@ void RegistrationService::postRegistration(const QUrl &baseUrl, const QString &a
     payload.insert("tenantId", tenantId);
 
     QNetworkReply *reply = m_net.post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+
+    // Set a timeout for the request (30 seconds)
+    QTimer *timeout = new QTimer(reply);
+    timeout->setSingleShot(true);
+    timeout->setInterval(30000);
+    connect(timeout, &QTimer::timeout, reply, [reply]() {
+        reply->abort();
+    });
+    timeout->start();
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, timeout]() {
+        timeout->stop();
         const QByteArray body = reply->readAll();
         const QNetworkReply::NetworkError err = reply->error();
         const QString errString = reply->errorString();

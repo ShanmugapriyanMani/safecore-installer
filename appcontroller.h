@@ -11,9 +11,11 @@
 #include <QPointer>
 #include <QStringList>
 #include <csignal>
+#include <functional>
 
 #include "registrationservice.h"
 #include "downloadtask.h"
+#include "appconstants.h"
 
 class AppController : public QObject
 {
@@ -49,6 +51,10 @@ class AppController : public QObject
     Q_PROPERTY(bool dockerOpsConflict READ dockerOpsConflict NOTIFY dockerOpsConflictChanged)
     Q_PROPERTY(QString dockerOpsContainerId READ dockerOpsContainerId NOTIFY dockerOpsContainerIdChanged)
     Q_PROPERTY(bool dockerOpsAutoRun READ dockerOpsAutoRun WRITE setDockerOpsAutoRun NOTIFY dockerOpsAutoRunChanged)
+
+    Q_PROPERTY(QString upgradeLog READ upgradeLog NOTIFY upgradeLogChanged)
+    Q_PROPERTY(bool upgradeRunning READ upgradeRunning NOTIFY upgradeRunningChanged)
+    Q_PROPERTY(double upgradeProgress READ upgradeProgress NOTIFY upgradeProgressChanged)
 
     Q_PROPERTY(int currentStep READ currentStep NOTIFY currentStepChanged)          // 0..3
     Q_PROPERTY(double stepProgress READ stepProgress NOTIFY stepProgressChanged)   // 0..1
@@ -101,6 +107,9 @@ public:
     bool dockerOpsAutoRun() const { return m_dockerOpsAutoRun; }
     void setDockerOpsAutoRun(bool value);
     bool setupComplete() const { return m_setupComplete; }
+    QString upgradeLog() const { return m_upgradeLog; }
+    bool upgradeRunning() const { return m_upgradeRunning; }
+    double upgradeProgress() const { return m_upgradeProgress; }
 
     int currentStep() const { return m_currentStep; }
     double stepProgress() const { return m_stepProgress; }
@@ -121,7 +130,7 @@ public:
     void resetLocalState();
     Q_INVOKABLE void runDockerContainer();
     Q_INVOKABLE void runDockerOps();
-    Q_INVOKABLE void startDockerOps();
+    Q_INVOKABLE void restartDockerOps();
     Q_INVOKABLE void stopDockerOps();
     Q_INVOKABLE void startDockerOpsLogs();
     Q_INVOKABLE void stopDockerOpsLogs();
@@ -133,6 +142,8 @@ public:
     Q_INVOKABLE void copyInstallPath();
     Q_INVOKABLE void goToStep(int step);
     Q_INVOKABLE void forceStep(int step);
+    Q_INVOKABLE void startUpgrade();
+    Q_INVOKABLE void cancelUpgrade();
 
 signals:
     void installPathChanged();
@@ -172,6 +183,11 @@ signals:
     void dockerOpsFinished(bool ok, const QString& message);
     void dockerOpsStopped(bool ok, const QString& message);
 
+    void upgradeLogChanged();
+    void upgradeRunningChanged();
+    void upgradeProgressChanged();
+    void upgradeFinished(bool hasUpdate, const QString& message);
+
     void currentStepChanged();
     void stepProgressChanged();
     void statusTextChanged();
@@ -203,6 +219,11 @@ private:
     void appendDockerPullLog(const QString& chunk);
     void resetDockerPullProgress();
     void updateDockerPullProgressFromChunk(const QString& chunk);
+    void appendUpgradeLog(const QString& chunk);
+    void resetUpgradeProgress();
+    void updateUpgradeProgressFromChunk(const QString& chunk);
+    void setUpgradeProgress(double value);
+    void startUpgradePull();
     void setDockerOpsLog(const QString& log);
     void setDockerOpsFollowLog(const QString& log);
     void setDockerOpsRunning(bool value);
@@ -211,6 +232,7 @@ private:
     void setDockerOpsConflict(bool value);
     void setDockerOpsContainerId(const QString& id);
     void startDockerPullProcess(bool resetStatus);
+    void performDockerLogin(std::function<void(bool)> callback);
     void checkDockerPullStall();
     void probeDockerRegistry();
     void restartDockerPull();
@@ -227,8 +249,8 @@ private:
     void setTenantMessage(const QString& message);
 
 private:
-    QString m_installPath = "/opt/ai_box";
-    QString m_serviceBaseUrl = "https://ss-qa-eus2-api-admin-h8ayfhffdfffa4bp.eastus2-01.azurewebsites.net";
+    QString m_installPath = AppConstants::DefaultInstallPath;
+    QString m_serviceBaseUrl = AppConstants::ServiceBaseUrl;
     QString m_macId;
     QString m_tenantId;
     QString m_registrationKey;
@@ -273,7 +295,19 @@ private:
     QString m_dockerOpsSafeCoreBoxId;
     QString m_dockerOpsTenantId;
     QString m_dockerOpsDomain;
-    QString m_tenantAccessKey = "7YCGe7FmFyrLTLD6qMDTWcWZx1q9Gxk9";
+    QString m_tenantAccessKey = AppConstants::TenantAccessKey;
+
+    QString m_upgradeLog;
+    QString m_upgradeRemainder;
+    QStringList m_upgradeLines;
+    QHash<QString, int> m_upgradeLineIndex;
+    QHash<QString, int> m_upgradeLayerState;
+    QString m_upgradeLastLayerId;
+    bool m_upgradeSawStatus = false;
+    double m_upgradeProgress = 0.0;
+    bool m_upgradeRunning = false;
+    bool m_upgradeCanceled = false;
+    QProcess* m_upgradeProcess = nullptr;
 
     int m_currentStep = 0;
     double m_stepProgress = 0.0;
