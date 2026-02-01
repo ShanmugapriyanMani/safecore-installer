@@ -1337,37 +1337,71 @@ void AppController::cancelInstallPrereqs()
     setInstallPrereqsLog(m_installPrereqsLog + "Docker installation canceled.\n");
 }
 
-void AppController::performDockerLogin(std::function<void(bool)> callback)
+void AppController::performDockerLogin(std::function<void(bool)> callback, int retryCount)
 {
-    appendDockerPullLog("Authenticating with container registry...\n");
+    const int maxRetries = 3;
+    const int retryDelayMs = 1500;
+    
+    if (retryCount == 0) {
+        appendDockerPullLog("Authenticating with container registry...\n");
+    } else {
+        appendDockerPullLog(QString("Retry attempt %1 of %2...\n").arg(retryCount).arg(maxRetries - 1));
+    }
     
     QProcess *loginProcess = new QProcess(this);
     loginProcess->setProcessChannelMode(QProcess::MergedChannels);
     
     connect(loginProcess, &QProcess::finished, this,
-            [this, loginProcess, callback](int exitCode, QProcess::ExitStatus exitStatus) {
+            [this, loginProcess, callback, retryCount, maxRetries, retryDelayMs](int exitCode, QProcess::ExitStatus exitStatus) {
                 const QString output = QString::fromUtf8(loginProcess->readAll()).trimmed();
                 const bool ok = (exitStatus == QProcess::NormalExit && exitCode == 0);
+                
+                loginProcess->deleteLater();
                 
                 if (ok) {
                     // Docker outputs its own "Login Succeeded" message
                     if (!output.isEmpty())
                         appendDockerPullLog(output + "\n");
+                    if (callback)
+                        callback(true);
                 } else {
-                    appendDockerPullLog(QString("Login failed: %1\n").arg(output.isEmpty() ? "Unknown error" : output));
+                    // Check if we should retry
+                    if (retryCount < maxRetries - 1 && !m_dockerPullCanceled) {
+                        appendDockerPullLog(QString("Login failed, retrying in %1ms...\n").arg(retryDelayMs));
+                        QTimer::singleShot(retryDelayMs, this, [this, callback, retryCount]() {
+                            if (!m_dockerPullCanceled) {
+                                performDockerLogin(callback, retryCount + 1);
+                            } else if (callback) {
+                                callback(false);
+                            }
+                        });
+                    } else {
+                        appendDockerPullLog(QString("Login failed: %1\n").arg(output.isEmpty() ? "Unknown error" : output));
+                        if (callback)
+                            callback(false);
+                    }
                 }
-                
-                loginProcess->deleteLater();
-                if (callback)
-                    callback(ok);
             });
     
     connect(loginProcess, &QProcess::errorOccurred, this,
-            [this, loginProcess, callback](QProcess::ProcessError) {
-                appendDockerPullLog("Login process failed to start.\n");
+            [this, loginProcess, callback, retryCount, maxRetries, retryDelayMs](QProcess::ProcessError) {
                 loginProcess->deleteLater();
-                if (callback)
-                    callback(false);
+                
+                // Check if we should retry
+                if (retryCount < maxRetries - 1 && !m_dockerPullCanceled) {
+                    appendDockerPullLog(QString("Login process failed, retrying in %1ms...\n").arg(retryDelayMs));
+                    QTimer::singleShot(retryDelayMs, this, [this, callback, retryCount]() {
+                        if (!m_dockerPullCanceled) {
+                            performDockerLogin(callback, retryCount + 1);
+                        } else if (callback) {
+                            callback(false);
+                        }
+                    });
+                } else {
+                    appendDockerPullLog("Login process failed to start.\n");
+                    if (callback)
+                        callback(false);
+                }
             });
     
     // Use echo to pipe password to docker login via stdin
@@ -2161,6 +2195,8 @@ void AppController::startUpgradePull()
                     message = "Upgrade canceled.";
                     hasUpdate = false;
                 } else if (ok) {
+                    // Set progress to 100% on success
+                    setUpgradeProgress(1.0);
                     if (m_upgradeLog.contains("Image is up to date", Qt::CaseInsensitive)) {
                         message = "Image is up to date. No upgrade available.";
                         hasUpdate = false;

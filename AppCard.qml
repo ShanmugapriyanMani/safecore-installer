@@ -15,11 +15,11 @@ Rectangle {
     property int subtitleMaxLines: 2
     property int subtitleElide: Text.ElideRight
     property int cardSpacing: 10
-    property int titlePixelSize: 16
+    property int titlePixelSize: Theme.fontSizeTitle
 
-    radius: 16
-    color: "#0A1022"
-    border.color: "#1F2A4A"
+    radius: Theme.cardRadius
+    color: Theme.bgLog
+    border.color: Theme.borderPrimary
     border.width: 1
 
     // IMPORTANT: don't force implicitHeight always; allow Layout.* to control height
@@ -34,7 +34,7 @@ Rectangle {
         Text {
             Layout.fillWidth: true
             text: card.title
-            color: "white"
+            color: Theme.textPrimary
             font.pixelSize: titlePixelSize
             font.bold: true
             elide: Text.ElideRight
@@ -44,8 +44,8 @@ Rectangle {
         Text {
             Layout.fillWidth: true
             text: card.subtitle
-            color: "#B8C2E0"
-            font.pixelSize: 12
+            color: Theme.textSecondary
+            font.pixelSize: Theme.fontSizeNormal
 
             wrapMode: card.subtitleWrap ? Text.WordWrap : Text.NoWrap
             maximumLineCount: card.subtitleMaxLines

@@ -11,9 +11,11 @@ Window {
     minimumHeight: 680
     visible: true
     title: "SafeCore"
-    color: "#0B1220"
+    color: Theme.bgPrimary
 
-    property color accent: "#6EE7FF"
+    // Theme aliases for backward compatibility
+    property color accent: Theme.accent
+    property color accent2: Theme.accent2
     property bool allowClose: false
     property bool showContainerLogs: false
     property var activeDialog: null
@@ -211,7 +213,6 @@ Window {
                                 }
 
                                 ColumnLayout {
-                                    Layout.fillWidth: true
                                     spacing: 0
 
                                     Text {
@@ -230,13 +231,16 @@ Window {
                                     }
                                 }
 
+                                Item { Layout.fillWidth: true }
+
                                 // Arrow indicator
                                 Text {
                                     text: "›"
                                     color: opsRoot.accent
                                     font.pixelSize: 20
                                     font.bold: true
-                                    opacity: hoverArea.containsMouse ? 1.0 : 0.0
+                                    Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                                    opacity: hoverArea.containsMouse ? 1.0 : 0.5
                                     Behavior on opacity { NumberAnimation { duration: 200 } }
                                 }
                             }
@@ -752,7 +756,7 @@ Window {
             color: "#0A0F1C"
             border.color: "#1F2A4A"
             border.width: 1
-            radius: 8
+            radius: 16
 
             RowLayout {
                 anchors.fill: parent
@@ -933,12 +937,16 @@ Window {
                         text: "No"
                         enabled: true
                         accent: "#374151"
+                        implicitWidth: 120
+                        implicitHeight: 44
                         onClicked: quitDialog.close()
                     }
                     AppButton {
                         text: "Yes"
                         enabled: true
                         accent: opsRoot.accent
+                        implicitWidth: 120
+                        implicitHeight: 44
                         onClicked: {
                             quitDialog.close()
                             opsRoot.allowClose = true
@@ -1047,6 +1055,8 @@ Window {
                         text: "OK"
                         enabled: true
                         accent: opsRoot.accent
+                        implicitWidth: 120
+                        implicitHeight: 44
                         onClicked: repairDialog.close()
                     }
                 }
@@ -1151,6 +1161,8 @@ Window {
                         text: "OK"
                         enabled: true
                         accent: opsRoot.accent
+                        implicitWidth: 120
+                        implicitHeight: 44
                         onClicked: upgradeWarningDialog.close()
                     }
                 }
@@ -1195,15 +1207,6 @@ Window {
         property bool upgradeDownloading: false
         property bool upgradeCanceled: false
         property string statusMessage: ""
-        property bool showLogs: true
-        property int slideIndex: 0
-        property var slideSources: [
-            "qrc:/images/ai/image1.jpg",
-            "qrc:/images/ai/image2.jpg",
-            "qrc:/images/ai/image3.jpg",
-            "qrc:/images/ai/image4.jpg",
-            "qrc:/images/ai/image5.jpg"
-        ]
 
         onOpened: {
             opsRoot.activeDialog = upgradeDialog
@@ -1212,24 +1215,10 @@ Window {
             upgradeDownloading = false
             upgradeCanceled = false
             statusMessage = ""
-            showLogs = true
-            slideIndex = 0
-            upgradeSlideTimer.start()
         }
 
         onClosed: {
             opsRoot.activeDialog = null
-            upgradeSlideTimer.stop()
-        }
-
-        Timer {
-            id: upgradeSlideTimer
-            interval: 3000
-            repeat: true
-            running: upgradeDialog.visible && !upgradeDialog.showLogs
-            onTriggered: {
-                upgradeDialog.slideIndex = (upgradeDialog.slideIndex + 1) % upgradeDialog.slideSources.length
-            }
         }
 
         Connections {
@@ -1424,16 +1413,22 @@ Window {
                             font.pixelSize: 13
                             text: Math.round(AppController.upgradeProgress * 100) + "%"
                         }
-                    }
-                }
 
-                AppButton {
-                    text: upgradeDialog.showLogs ? "Hide Logs" : "Show Logs"
-                    visible: !upgradeDialog.upgradeCanceled && (upgradeDialog.upgradeDownloading || (upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable))
-                    onClicked: upgradeDialog.showLogs = !upgradeDialog.showLogs
-                    accent: opsRoot.accent
-                    implicitWidth: 110
-                    implicitHeight: 34
+                        Rectangle {
+                            visible: upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable
+                            width: 20
+                            height: 20
+                            radius: 10
+                            color: "#22C55E"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "\u2713"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: "#FFFFFF"
+                            }
+                        }
+                    }
                 }
 
                 Item {
@@ -1452,9 +1447,6 @@ Window {
                         border.color: "#2D3B5F"
                         border.width: 1
                         clip: true
-                        opacity: upgradeDialog.showLogs ? 1 : 0
-                        enabled: upgradeDialog.showLogs
-                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
                         property bool stickToBottom: true
                         function updateStickState() {
@@ -1583,16 +1575,6 @@ Window {
                         }
                         Component.onCompleted: scrollToBottom()
                     }
-
-                    Image {
-                        anchors.fill: parent
-                        fillMode: Image.Stretch
-                        source: upgradeDialog.slideSources.length
-                            ? upgradeDialog.slideSources[upgradeDialog.slideIndex]
-                            : ""
-                        opacity: upgradeDialog.showLogs ? 0 : 1
-                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                    }
                 }
 
                 Item { Layout.fillHeight: true }
@@ -1613,6 +1595,8 @@ Window {
                         visible: AppController.upgradeRunning
                         enabled: true
                         accent: "#F87171"
+                        implicitWidth: 120
+                        implicitHeight: 44
                         onClicked: AppController.cancelUpgrade()
                     }
                     AppButton {
@@ -1620,6 +1604,8 @@ Window {
                         visible: upgradeDialog.upgradeComplete && !upgradeDialog.upgradeAvailable
                         enabled: true
                         accent: opsRoot.accent
+                        implicitWidth: 120
+                        implicitHeight: 44
                         onClicked: upgradeDialog.close()
                     }
                     AppButton {
@@ -1627,6 +1613,8 @@ Window {
                         visible: upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable
                         enabled: true
                         accent: opsRoot.accent
+                        implicitWidth: 120
+                        implicitHeight: 44
                         onClicked: {
                             upgradeDialog.close()
                             AppController.runDockerOps()
@@ -1634,86 +1622,6 @@ Window {
                     }
                 }
                 Item { height: 10 }
-            }
-        }
-    }
-
-    // Modern ProgressBar component
-    component ModernProgressBar : Item {
-        id: mp
-        property real value: 0.0
-        property bool busy: false
-
-        implicitHeight: 18
-        implicitWidth: 240
-        property int pad: 2
-
-        Rectangle {
-            id: track
-            anchors.fill: parent
-            radius: height / 2
-            color: "#0A0F1C"
-            border.color: "#1F2A4A"
-            border.width: 1
-            clip: true
-
-            Rectangle {
-                id: fill
-                x: mp.pad
-                y: mp.pad
-                height: track.height - 2 * mp.pad
-                radius: 10
-                property real v: Math.max(0.0, Math.min(1.0, mp.value))
-                width: Math.max(height, (track.width - 2 * mp.pad) * v)
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: opsRoot.accent }
-                    GradientStop { position: 1.0; color: "#38BDF8" }
-                }
-                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-            }
-
-            Rectangle {
-                id: dot
-                width: 14
-                height: 14
-                radius: width / 2
-                y: (track.height - height) / 2
-                color: "#FFFFFF"
-                property real innerW: (track.width - 2 * mp.pad)
-                property real v: Math.max(0.0, Math.min(1.0, mp.value))
-                x: {
-                    var left = mp.pad;
-                    var right = track.width - mp.pad - width;
-                    var pos = mp.pad + (innerW * v) - (width / 2);
-                    return Math.max(left, Math.min(right, pos));
-                }
-                Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-            }
-
-            Rectangle {
-                id: shine
-                visible: mp.busy
-                y: mp.pad
-                height: track.height - 2 * mp.pad
-                width: 90
-                radius: 10
-                opacity: 0.22
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#FFFFFF00" }
-                    GradientStop { position: 0.5; color: "#FFFFFFAA" }
-                    GradientStop { position: 1.0; color: "#FFFFFF00" }
-                }
-                x: -width
-                SequentialAnimation on x {
-                    running: mp.busy
-                    loops: Animation.Infinite
-                    NumberAnimation {
-                        from: -shine.width + 100
-                        to: track.width
-                        duration: 1100
-                        easing.type: Easing.InOutSine
-                    }
-                }
             }
         }
     }

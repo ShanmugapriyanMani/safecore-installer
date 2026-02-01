@@ -1,10 +1,15 @@
 <RCC>
     <qresource prefix="/">
+        <file>qmldir</file>
         <file>main.qml</file>
-        <file>safespace_global_ops.qml</file>
+        <file>safecore_ops.qml</file>
+        <file>Theme.qml</file>
         <file>AppButton.qml</file>
         <file>AppCard.qml</file>
         <file>StepRow.qml</file>
+        <file>ModernProgressBar.qml</file>
+        <file>ConsoleLog.qml</file>
+        <file>SafeCoreDialog.qml</file>
     </qresource>
     <qresource prefix="/pages"/>
 </RCC>

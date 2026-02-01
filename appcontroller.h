@@ -232,7 +232,7 @@ private:
     void setDockerOpsConflict(bool value);
     void setDockerOpsContainerId(const QString& id);
     void startDockerPullProcess(bool resetStatus);
-    void performDockerLogin(std::function<void(bool)> callback);
+    void performDockerLogin(std::function<void(bool)> callback, int retryCount = 0);
     void checkDockerPullStall();
     void probeDockerRegistry();
     void restartDockerPull();

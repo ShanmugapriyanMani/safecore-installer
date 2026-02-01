@@ -9,15 +9,15 @@ Rectangle {
     property bool active: false
     property bool done: false
     property string indexText: "1"
-    property color accent: "#6EE7FF"
+    property color accent: Theme.accent
 
     Layout.fillWidth: true
     implicitHeight: 84
-    radius: 16
+    radius: Theme.cardRadius
 
-    color: active ? "#0A1022" : "#0B132A"
+    color: active ? Theme.bgLog : "#0B132A"
     border.width: active ? 2 : 1
-    border.color: active ? accent : "#1F2A4A"
+    border.color: active ? accent : Theme.borderPrimary
 
     RowLayout {
         anchors.fill: parent
@@ -28,14 +28,14 @@ Rectangle {
             width: 46
             height: 46
             radius: 14
-            color: done ? "#A7F3D0" : (active ? s.accent : "#1B2440")
+            color: done ? Theme.stepDone : (active ? s.accent : Theme.buttonDisabled)
             border.color: "#00000000"
 
             Text {
                 anchors.centerIn: parent
                 text: done ? "\u2713" : s.indexText
-                color: done ? "#052015" : (active ? "#08101D" : "#B8C2E0")
-                font.pixelSize: 16
+                color: done ? Theme.textSuccessDark : (active ? "#08101D" : Theme.textSecondary)
+                font.pixelSize: Theme.fontSizeTitle
                 font.bold: true
             }
         }
@@ -46,7 +46,7 @@ Rectangle {
 
             Text {
                 text: s.title
-                color: "white"
+                color: Theme.textPrimary
                 font.pixelSize: 15
                 font.bold: true
                 elide: Text.ElideRight
@@ -55,8 +55,8 @@ Rectangle {
 
             Text {
                 text: s.subtitle
-                color: "#B8C2E0"
-                font.pixelSize: 12
+                color: Theme.textSecondary
+                font.pixelSize: Theme.fontSizeNormal
                 elide: Text.ElideRight
                 maximumLineCount: 1
             }

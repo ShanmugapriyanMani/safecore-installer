@@ -3,6 +3,9 @@
 #include <QQmlContext>
 #include <QIcon>
 #include <QSocketNotifier>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QWindow>
 #include <QString>
 #include <csignal>
 #include <unistd.h>
@@ -11,11 +14,28 @@
 
 namespace {
 int sigintFd[2];
+const QString SOCKET_NAME = "SafeCoreInstallerInstance";
 
 void signalHandler(int)
 {
     char ch = 1;
     ::write(sigintFd[0], &ch, sizeof(ch));
+}
+
+// Bring window to front
+void raiseWindow(QQmlApplicationEngine* engine)
+{
+    if (!engine)
+        return;
+    const auto rootObjects = engine->rootObjects();
+    for (QObject* obj : rootObjects) {
+        if (QWindow* window = qobject_cast<QWindow*>(obj)) {
+            window->show();
+            window->raise();
+            window->requestActivate();
+            break;
+        }
+    }
 }
 }
 
@@ -34,6 +54,23 @@ int main(int argc, char *argv[])
     app.setApplicationName("SafeCore");
     QGuiApplication::setDesktopFileName("safespace-global");
     app.setWindowIcon(QIcon("qrc:/images/launch/Safespace.png"));
+
+    // Single instance check - try to connect to existing instance
+    {
+        QLocalSocket socket;
+        socket.connectToServer(SOCKET_NAME);
+        if (socket.waitForConnected(500)) {
+            // Another instance exists - send activate signal and exit
+            socket.write("activate");
+            socket.waitForBytesWritten(1000);
+            socket.disconnectFromServer();
+            qInfo() << "SafeCore is already running. Activating existing window.";
+            return 0;
+        }
+    }
+
+    // Remove stale socket file if exists
+    QLocalServer::removeServer(SOCKET_NAME);
 
     bool dockerOpsMode = false;
     bool forceInstaller = false;
@@ -70,7 +107,7 @@ int main(int argc, char *argv[])
         dockerOpsMode = true;
     if (dockerOpsMode)
         app.setApplicationName("SafeCore");
-    const char *qmlPath = dockerOpsMode ? "qrc:/safespace_global_ops.qml" : "qrc:/main.qml";
+    const char *qmlPath = dockerOpsMode ? "qrc:/safecore_ops.qml" : "qrc:/main.qml";
     const QUrl url(QString::fromLatin1(qmlPath));
     QObject::connect(
         &engine,
@@ -99,6 +136,23 @@ int main(int argc, char *argv[])
     }
 
     engine.load(url);
+
+    // Start local server for single instance detection
+    QLocalServer localServer;
+    if (localServer.listen(SOCKET_NAME)) {
+        QObject::connect(&localServer, &QLocalServer::newConnection, [&]() {
+            QLocalSocket* clientSocket = localServer.nextPendingConnection();
+            if (clientSocket) {
+                clientSocket->waitForReadyRead(1000);
+                QByteArray message = clientSocket->readAll();
+                if (message == "activate") {
+                    raiseWindow(&engine);
+                }
+                clientSocket->disconnectFromServer();
+                clientSocket->deleteLater();
+            }
+        });
+    }
 
     return app.exec();
 }
