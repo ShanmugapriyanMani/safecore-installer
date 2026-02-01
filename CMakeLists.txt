@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(ai_box_installer VERSION 0.1 LANGUAGES CXX)
+project(ai_box_installer VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -128,6 +128,6 @@ set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
 set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/safecore-installer")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "SafeCore")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "libc6, libstdc++6, libgcc-s1, libx11-6, libxcb1, libxkbcommon0, libgl1, libegl1, libfontconfig1, libfreetype6, libglib2.0-0")
+    "libc6, libstdc++6, libgcc-s1, libx11-6, libxcb1, libxkbcommon0, libgl1, libegl1, libfontconfig1, libfreetype6, libglib2.0-0, ca-certificates")
 set(CPACK_VERBATIM_VARIABLES ON)
 include(CPack)

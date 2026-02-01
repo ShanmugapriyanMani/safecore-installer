@@ -12,10 +12,51 @@ Window {
     visible: true
     title: "SafeCore"
     flags: Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
-    color: "#0B1220"
+
+    // Theme Colors - Background
+    readonly property color bgPrimary: "#0B1220"
+    readonly property color bgSecondary: "#111B33"
+    readonly property color bgCard: "#0E1730"
+    readonly property color bgInput: "#0F172A"
+    readonly property color bgInputDisabled: "#0B1220"
+    readonly property color bgPopup: "#151B2A"
+    readonly property color bgLog: "#0A1022"
+
+    // Theme Colors - Border
+    readonly property color borderPrimary: "#1F2A4A"
+    readonly property color borderSecondary: "#344666"
+    readonly property color borderProgress: "#24324C"
+
+    // Theme Colors - Accent
+    readonly property color accent: "#6EE7FF"
+    readonly property color accent2: "#A78BFA"
+    readonly property color accentError: "#F87171"
+    readonly property color accentSuccess: "#22C55E"
+    readonly property color accentSuccessDark: "#16A34A"
+    readonly property color accentWarning: "#EF4444"
+    readonly property color accentWarningDark: "#DC2626"
+
+    // Theme Colors - Text
+    readonly property color textPrimary: "#E2E8F0"
+    readonly property color textSecondary: "#B8C2E0"
+    readonly property color textMuted: "#94A3B8"
+    readonly property color textPlaceholder: "#7C8AB0"
+    readonly property color textInfo: "#93C5FD"
+    readonly property color textSuccess: "#A7F3D0"
+    readonly property color textError: "#FCA5A5"
+    readonly property color textSuccessDark: "#052E16"
+    readonly property color textErrorDark: "#7F1D1D"
+    readonly property color textLog: "#C7D2FE"
+
+    // Theme Colors - Step Indicator
+    readonly property color stepInactive: "#2A3756"
+
+    // Theme Colors - Dialog/Button
+    readonly property color buttonSecondary: "#374151"
+    readonly property color shimmerLight: "#BFE8FF"
+
+    color: bgPrimary
     property bool allowClose: false
-    property color accent: "#6EE7FF"
-    property color accent2: "#A78BFA"
     property bool installationComplete: false
     property bool devInstallStart: false
     property bool devTenantStart: false
@@ -58,8 +99,8 @@ Window {
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0.0; color: "#0B1220" }
-            GradientStop { position: 1.0; color: "#111B33" }
+            GradientStop { position: 0.0; color: root.bgPrimary }
+            GradientStop { position: 1.0; color: root.bgSecondary }
         }
     }
 
@@ -79,8 +120,8 @@ Window {
                 Layout.preferredWidth: 360
                 Layout.fillHeight: true
                 radius: 18
-                color: "#0E1730"
-                border.color: "#1F2A4A"
+                color: root.bgCard
+                border.color: root.borderPrimary
                 border.width: 1
                 clip: true
 
@@ -112,11 +153,11 @@ Window {
                     Text {
                         text: "Guided setup for registration and installation\nwith Docker, env variables, and AI models."
                         wrapMode: Text.WordWrap
-                        color: "#B8C2E0"
+                        color: root.textSecondary
                         font.pixelSize: 13
                     }
 
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#1F2A4A" }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.borderPrimary }
 
                     StepRow {
                         title: "Welcome"
@@ -146,8 +187,8 @@ Window {
                     }
 
                     StepRow {
-                        title: "Finish"
-                        subtitle: "Review and complete setup"
+                        title: "Run"
+                        subtitle: "Run the SafeCore application"
                         active: AppController.currentStep === 3
                         done: AppController.currentStep === 3 && !AppController.busy
                         indexText: "4"
@@ -162,8 +203,8 @@ Window {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 radius: 18
-                color: "#0E1730"
-                border.color: "#1F2A4A"
+                color: root.bgCard
+                border.color: root.borderPrimary
                 border.width: 1
                 clip: true
 
@@ -193,7 +234,7 @@ Window {
                         anchors.verticalCenter: parent.verticalCenter
                         height: 6
                         radius: height / 2
-                        color: "#24324C"
+                        color: root.borderProgress
                     }
 
                     Rectangle {
@@ -222,8 +263,8 @@ Window {
                                 : baseLine.x + (baseLine.width * (index / (stageIndicator.stageCount - 1.0))) - (width / 2)
                             color: index < AppController.currentStep
                                 ? root.accent
-                                : (index === AppController.currentStep ? root.accent2 : "#2A3756")
-                            border.color: index <= AppController.currentStep ? "#0B1220" : "#344666"
+                                : (index === AppController.currentStep ? root.accent2 : root.stepInactive)
+                            border.color: index <= AppController.currentStep ? root.bgPrimary : root.borderSecondary
                             border.width: 1
                         }
                     }
@@ -234,126 +275,158 @@ Window {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    height: 56
+                    height: 86
 
+                    // Stylish separator
                     Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        height: 1
-                        color: "#1F2A4A"
+                        height: 2
+                        radius: 1
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.5; color: "#2D3B5F" }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
                     }
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        anchors.topMargin: 18
-                        spacing: 10
+                    // Enhanced control panel
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.top: parent.top
+                        anchors.topMargin: 14
+                        color: "#0A1022"
+                        border.color: "#1F2A4A"
+                        border.width: 1
+                        radius: 16
+
                         RowLayout {
-                            spacing: 10
-                            visible: AppController.currentStep === 1 || AppController.currentStep === 2
-                            AppButton {
-                                text: "Register"
-                                visible: AppController.currentStep === 1
-                                enabled: !AppController.busy && !AppController.keyValid
-                                loading: AppController.busy && AppController.currentStep === 1 && !AppController.keyValid
-                                loadingText: "Registering..."
-                                onClicked: AppController.validateKey()
-                                accent: root.accent
-                            }
-                            AppButton {
-                                text: "Sync Device"
-                                visible: AppController.currentStep === 1
-                                enabled: AppController.keyValid && !AppController.syncBusy && !rightStack.syncSuccess
-                                loading: AppController.syncBusy
-                                loadingText: "Syncing..."
-                                onClicked: AppController.syncRelay()
-                                accent: root.accent
-                            }
-                            AppButton {
-                                text: "Setup Tenant"
-                                visible: AppController.currentStep === 1
-                                enabled: rightStack.syncSuccess && !AppController.tenantBusy && !AppController.tenantSuccess
-                                loading: AppController.tenantBusy
-                                loadingText: "Setting up..."
-                                onClicked: AppController.fetchTenantData(tenantSelect.currentText)
-                                accent: root.accent
-                            }
-                            AppButton {
-                                text: "Cancel"
-                                visible: AppController.currentStep === 2
-                                enabled: AppController.dockerPullActive || AppController.installPrereqsRunning
-                                onClicked: cancelDialog.open()
-                                accent: "#F87171"
-                            }
-                            AppButton {
-                                text: "Install"
-                                visible: AppController.currentStep === 2
-                                loading: AppController.installPrereqsRunning
-                                loadingText: "Installing..."
-                                enabled: !AppController.installPrereqsRunning && !AppController.installPrereqsDone
-                                onClicked: {
-                                    installState.showLogs = true
-                                    installState.started = false
-                                    installState.awaitingAuth = false
-                                    installState.statusText = "Installing Docker and NVIDIA Container Toolkit..."
-                                    AppController.startInstallPrereqs()
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 12
+
+                            // Control buttons
+                            RowLayout {
+                                spacing: 12
+                                visible: AppController.currentStep === 1 || AppController.currentStep === 2
+
+                                AppButton {
+                                    text: "Register"
+                                    visible: AppController.currentStep === 1
+                                    enabled: !AppController.busy && !AppController.keyValid
+                                    loading: AppController.busy && AppController.currentStep === 1 && !AppController.keyValid
+                                    loadingText: "Registering..."
+                                    onClicked: AppController.validateKey()
+                                    accent: root.accent
+                                    implicitHeight: 44
                                 }
-                                accent: root.accent
-                            }
-                            AppButton {
-                                text: installState.installDone ? "Pulled" : "Pull"
-                                visible: AppController.currentStep === 2
-                                enabled: AppController.installPrereqsDone && !installTimer.running && !installState.installDone
-                                onClicked: {
-                                    installState.reset()
-                                    installPage.slideIndex = 0
-                                    installState.statusText = "Waiting for Docker pull..."
-                                    installState.started = false
-                                    installState.awaitingAuth = true
-                                    AppController.pullDockerImage()
+                                AppButton {
+                                    text: "Sync Device"
+                                    visible: AppController.currentStep === 1
+                                    enabled: AppController.keyValid && !AppController.syncBusy && !rightStack.syncSuccess
+                                    loading: AppController.syncBusy
+                                    loadingText: "Syncing..."
+                                    onClicked: AppController.syncRelay()
+                                    accent: root.accent
+                                    implicitHeight: 44
                                 }
-                                accent: root.accent
-                            }
-                        }
-                        Item { Layout.fillWidth: true }
-                        AppButton {
-                            text: AppController.currentStep === 3 ? "Finish" : "Next"
-                            enabled: {
-                                if (AppController.currentStep === 0)
-                                    return true;
-                                if (AppController.currentStep === 1)
-                                    return AppController.tenantSuccess;
-                                if (AppController.currentStep === 2)
-                                    return installState.installDone;
-                                if (AppController.currentStep === 3)
-                                    return launchCheck.checked;
-                                return true;
-                            }
-                            onClicked: {
-                                if (AppController.currentStep === 3) {
-                                    const serviceOk = AppController.installDockerService(false)
-                                    if (!serviceOk)
-                                        return
-                                    if (launchCheck.checked) {
-                                        const ok = AppController.launchDockerOpsApp(true)
-                                        if (ok) {
-                                            root.allowClose = true
-                                            Qt.quit()
-                                        }
-                                        return
+                                AppButton {
+                                    text: "Setup Tenant"
+                                    visible: AppController.currentStep === 1
+                                    enabled: rightStack.syncSuccess && !AppController.tenantBusy && !AppController.tenantSuccess
+                                    loading: AppController.tenantBusy
+                                    loadingText: "Setting up..."
+                                    onClicked: AppController.fetchTenantData(tenantSelect.currentText)
+                                    accent: root.accent
+                                    implicitHeight: 44
+                                }
+                                AppButton {
+                                    text: "Install"
+                                    visible: AppController.currentStep === 2
+                                    loading: AppController.installPrereqsRunning
+                                    loadingText: "Installing..."
+                                    enabled: !AppController.installPrereqsRunning && !AppController.installPrereqsDone
+                                    onClicked: {
+                                        installState.showLogs = true
+                                        installState.started = false
+                                        installState.awaitingAuth = false
+                                        installState.statusText = "Installing Docker and NVIDIA Container Toolkit..."
+                                        AppController.startInstallPrereqs()
                                     }
-                                    root.allowClose = true
-                                    Qt.quit()
-                                } else if (AppController.currentStep === 0) {
-                                    AppController.goToStep(1)
-                                } else if (AppController.currentStep === 1) {
-                                    AppController.goToStep(2)
-                                } else if (AppController.currentStep === 2) {
-                                    AppController.goToStep(3)
+                                    accent: root.accent
+                                    implicitHeight: 44
+                                }
+                                AppButton {
+                                    text: installState.installDone ? "Pulled" : "Pull"
+                                    visible: AppController.currentStep === 2
+                                    enabled: AppController.installPrereqsDone && !installTimer.running && !installState.installDone && !AppController.dockerPullActive
+                                    onClicked: {
+                                        installState.reset()
+                                        installPage.slideIndex = 0
+                                        installState.statusText = "Waiting for Docker pull..."
+                                        installState.started = false
+                                        installState.awaitingAuth = true
+                                        AppController.pullDockerImage()
+                                    }
+                                    accent: root.accent
+                                    implicitHeight: 44
+                                }
+                                AppButton {
+                                    text: "Cancel"
+                                    visible: AppController.currentStep === 2
+                                    enabled: AppController.dockerPullActive
+                                    onClicked: cancelDialog.open()
+                                    accent: root.accentError
+                                    implicitHeight: 44
                                 }
                             }
-                            accent: root.accent
+
+                            Item { Layout.fillWidth: true }
+
+                            AppButton {
+                                text: AppController.currentStep === 3 ? "Run" : "Next"
+                                enabled: {
+                                    if (AppController.currentStep === 0)
+                                        return true;
+                                    if (AppController.currentStep === 1)
+                                        return AppController.tenantSuccess;
+                                    if (AppController.currentStep === 2)
+                                        return installState.installDone;
+                                    if (AppController.currentStep === 3)
+                                        return launchCheck.checked;
+                                    return true;
+                                }
+                                onClicked: {
+                                    if (AppController.currentStep === 3) {
+                                        const serviceOk = AppController.installDockerService(false)
+                                        if (!serviceOk)
+                                            return
+                                        if (launchCheck.checked) {
+                                            const ok = AppController.launchDockerOpsApp(true)
+                                            if (ok) {
+                                                root.allowClose = true
+                                                Qt.quit()
+                                            }
+                                            return
+                                        }
+                                        root.allowClose = true
+                                        Qt.quit()
+                                    } else if (AppController.currentStep === 0) {
+                                        AppController.goToStep(1)
+                                    } else if (AppController.currentStep === 1) {
+                                        AppController.goToStep(2)
+                                    } else if (AppController.currentStep === 2) {
+                                        AppController.goToStep(3)
+                                    }
+                                }
+                                accent: root.accent
+                                implicitWidth: 120
+                                implicitHeight: 44
+                            }
                         }
                     }
                 }
@@ -365,7 +438,7 @@ Window {
                     anchors.bottom: footerBar.top
                     anchors.top: stageIndicator.bottom
                     anchors.topMargin: 10
-                    anchors.bottomMargin: 10
+                    anchors.bottomMargin: 6
                     currentIndex: AppController.currentStep
 
                         property bool syncSuccess: false
@@ -388,13 +461,13 @@ Window {
                                     Text {
                                         Layout.fillWidth: true
                                         wrapMode: Text.WordWrap
-                                        color: "#B8C2E0"
+                                        color: root.textSecondary
                                         text: "This setup will guide you through registration and installation."
                                     }
                                     Text {
                                         Layout.fillWidth: true
                                         wrapMode: Text.WordWrap
-                                        color: "#93C5FD"
+                                        color: root.textInfo
                                         text: "What to expect:\n• Validate MAC/Tenant and generate a key\n• Install Docker and fetch env variables\n• Download required AI models"
                                     }
                                     
@@ -462,8 +535,8 @@ Window {
                                                 bottomPadding: 8
                                             placeholderText: "MAC ID (ex: 00:14:22:01:23:45)"
                                                 font.pixelSize: 13
-                                                color: macField.enabled ? "#E2E8F0" : "#94A3B8"
-                                                placeholderTextColor: "#7C8AB0"
+                                                color: macField.enabled ? root.textPrimary : root.textMuted
+                                                placeholderTextColor: root.textPlaceholder
                                                 text: AppController.macId
                                                 onTextEdited: {
                                                     var hex = text.replace(/[^0-9a-fA-F]/g, "").toUpperCase()
@@ -480,8 +553,8 @@ Window {
                                                 enabled: !AppController.busy && !AppController.keyValid
                                                 background: Rectangle {
                                                     radius: 4
-                                                    color: macField.enabled ? "#0F172A" : "#0B1220"
-                                                    border.color: macField.activeFocus ? root.accent : "#1F2A4A"
+                                                    color: macField.enabled ? root.bgInput : root.bgInputDisabled
+                                                    border.color: macField.activeFocus ? root.accent : root.borderPrimary
                                                     border.width: 1
                                                 }
                                             }
@@ -505,8 +578,8 @@ Window {
                                             bottomPadding: 8
                                             placeholderText: "Tenant ID (ex: 28C30B1F-FF4B-48DB-804F-4A1CB57990E6)"
                                             font.pixelSize: 13
-                                            color: tenantField.enabled ? "#E2E8F0" : "#94A3B8"
-                                            placeholderTextColor: "#7C8AB0"
+                                            color: tenantField.enabled ? root.textPrimary : root.textMuted
+                                            placeholderTextColor: root.textPlaceholder
                                             text: AppController.tenantId
                                             onTextEdited: {
                                                 var hex = text.replace(/[^0-9a-fA-F]/g, "").toUpperCase()
@@ -530,8 +603,8 @@ Window {
                                             enabled: !AppController.busy && !AppController.keyValid
                                             background: Rectangle {
                                                 radius: 4
-                                                color: tenantField.enabled ? "#0F172A" : "#0B1220"
-                                                border.color: tenantField.activeFocus ? root.accent : "#1F2A4A"
+                                                color: tenantField.enabled ? root.bgInput : root.bgInputDisabled
+                                                border.color: tenantField.activeFocus ? root.accent : root.borderPrimary
                                                 border.width: 1
                                             }
                                         }
@@ -544,13 +617,13 @@ Window {
                                             width: 18
                                             height: 18
                                             radius: width / 2
-                                            color: AppController.keyValid ? "#22C55E" : "#EF4444"
-                                            border.color: AppController.keyValid ? "#16A34A" : "#DC2626"
+                                            color: AppController.keyValid ? root.accentSuccess : root.accentWarning
+                                            border.color: AppController.keyValid ? root.accentSuccessDark : root.accentWarningDark
                                             border.width: 1
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: AppController.keyValid ? "\u2713" : "\u2715"
-                                                color: AppController.keyValid ? "#052E16" : "#7F1D1D"
+                                                color: AppController.keyValid ? root.textSuccessDark : root.textErrorDark
                                                 font.pixelSize: 12
                                                 font.bold: true
                                             }
@@ -558,7 +631,7 @@ Window {
                                         Text {
                                             Layout.fillWidth: true
                                             wrapMode: Text.WordWrap
-                                            color: AppController.keyValid ? "#A7F3D0" : "#FCA5A5"
+                                            color: AppController.keyValid ? root.textSuccess : root.textError
                                             font.pixelSize: 12
                                             text: AppController.registrationMessage
                                         }
@@ -585,14 +658,14 @@ Window {
                                             bottomPadding: 8
                                             placeholderText: "ex: https://relay.example.com/api/v1/relay"
                                             font.pixelSize: 13
-                                            color: relayField.enabled ? "#E2E8F0" : "#94A3B8"
-                                            placeholderTextColor: "#7C8AB0"
+                                            color: relayField.enabled ? root.textPrimary : root.textMuted
+                                            placeholderTextColor: root.textPlaceholder
                                             text: AppController.relayUrl
                                             onTextChanged: AppController.relayUrl = text
                                             background: Rectangle {
                                                 radius: 4
-                                                color: relayField.enabled ? "#0F172A" : "#0B1220"
-                                                border.color: relayField.activeFocus ? root.accent : "#1F2A4A"
+                                                color: relayField.enabled ? root.bgInput : root.bgInputDisabled
+                                                border.color: relayField.activeFocus ? root.accent : root.borderPrimary
                                                 border.width: 1
                                             }
                                         }
@@ -601,7 +674,7 @@ Window {
                                             Layout.fillWidth: true
                                             visible: AppController.relayError.length > 0
                                             wrapMode: Text.WordWrap
-                                            color: "#FCA5A5"
+                                            color: root.textError
                                             font.pixelSize: 12
                                             text: AppController.relayError
                                         }
@@ -615,20 +688,20 @@ Window {
                                                 width: 18
                                                 height: 18
                                                 radius: width / 2
-                                                color: "#22C55E"
-                                                border.color: "#16A34A"
+                                                color: root.accentSuccess
+                                                border.color: root.accentSuccessDark
                                                 border.width: 1
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: "\u2713"
-                                                    color: "#052E16"
+                                                    color: root.textSuccessDark
                                                     font.pixelSize: 12
                                                     font.bold: true
                                                 }
                                             }
                                             Text {
                                                 wrapMode: Text.WordWrap
-                                                color: rightStack.syncSuccess ? "#A7F3D0" : "#FCA5A5"
+                                                color: rightStack.syncSuccess ? root.textSuccess : root.textError
                                                 text: rightStack.syncMessage.length
                                                     ? rightStack.syncMessage
                                                     : (rightStack.syncSuccess ? "Sync API registration completed successfully." : "")
@@ -663,13 +736,13 @@ Window {
                                             font.pixelSize: 13
                                             contentItem: Text {
                                                 text: tenantSelect.displayText
-                                                color: "#E2E8F0"
+                                                color: root.textPrimary
                                                 verticalAlignment: Text.AlignVCenter
                                                 leftPadding: 10
                                             }
                                             indicator: Text {
                                                 text: "\u25BC"
-                                                color: "#94A3B8"
+                                                color: root.textMuted
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 anchors.right: parent.right
                                                 anchors.rightMargin: 10
@@ -677,8 +750,8 @@ Window {
                                             }
                                             background: Rectangle {
                                                 radius: 8
-                                                color: "#0F172A"
-                                                border.color: tenantSelect.activeFocus ? root.accent : "#1F2A4A"
+                                                color: root.bgInput
+                                                border.color: tenantSelect.activeFocus ? root.accent : root.borderPrimary
                                                 border.width: 1
                                             }
                                             popup: Popup {
@@ -688,8 +761,8 @@ Window {
                                                 padding: 0
                                                 background: Rectangle {
                                                     radius: 5
-                                                    color: "#0A1022"
-                                                    border.color: "#1F2A4A"
+                                                    color: root.bgLog
+                                                    border.color: root.borderPrimary
                                                     border.width: 1
                                                 }
                                                 contentItem: ListView {
@@ -708,12 +781,12 @@ Window {
                                                 readonly property bool isLast: index === (tenantSelect.model.length - 1)
                                                 contentItem: Text {
                                                     text: modelData
-                                                    color: "#E2E8F0"
+                                                    color: root.textPrimary
                                                     verticalAlignment: Text.AlignVCenter
                                                     leftPadding: 10
                                                 }
                                                 background: Rectangle {
-                                                    color: highlighted || hovered ? "#111B33" : "#0A1022"
+                                                    color: highlighted || hovered ? root.bgSecondary : root.bgLog
                                                     radius: isLast ? 8 : 0
                                                 }
                                             }
@@ -726,13 +799,13 @@ Window {
                                                 width: 18
                                                 height: 18
                                                 radius: width / 2
-                                                color: AppController.tenantSuccess ? "#22C55E" : "#EF4444"
-                                                border.color: AppController.tenantSuccess ? "#16A34A" : "#DC2626"
+                                                color: AppController.tenantSuccess ? root.accentSuccess : root.accentWarning
+                                                border.color: AppController.tenantSuccess ? root.accentSuccessDark : root.accentWarningDark
                                                 border.width: 1
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: AppController.tenantSuccess ? "\u2713" : "\u2715"
-                                                    color: AppController.tenantSuccess ? "#052E16" : "#7F1D1D"
+                                                    color: AppController.tenantSuccess ? root.textSuccessDark : root.textErrorDark
                                                     font.pixelSize: 12
                                                     font.bold: true
                                                 }
@@ -741,7 +814,7 @@ Window {
                                                 Layout.fillWidth: true
                                                 wrapMode: Text.WordWrap
                                                 font.pixelSize: 12
-                                                color: AppController.tenantSuccess ? "#A7F3D0" : "#FCA5A5"
+                                                color: AppController.tenantSuccess ? root.textSuccess : root.textError
                                                 text: AppController.tenantMessage
                                             }
                                         }
@@ -852,9 +925,10 @@ Window {
                                 function onDockerPullFinished(ok, message) {
                                     if (installState.cancelPending) {
                                         installTimer.stop()
+                                        AppController.clearDockerPullLog()
                                         installState.reset()
                                         installPage.slideIndex = 0
-                                        installState.statusText = "Ready to Install."
+                                        installState.statusText = "Ready to Pull."
                                         return
                                     }
                                     installTimer.stop()
@@ -897,13 +971,13 @@ Window {
                                             wrapMode: Text.WordWrap
                                             maximumLineCount: 2
                                             elide: Text.ElideRight
-                                            color: "#B8C2E0"
+                                            color: root.textSecondary
                                             text: installState.statusText
                                         }
                                         RowLayout {
                                             spacing: 6
                                             Text {
-                                                color: "#93C5FD"
+                                                color: root.textInfo
                                                 text: Math.round(installState.progress * 100) + "%"
                                             }
                                             Rectangle {
@@ -911,13 +985,13 @@ Window {
                                                 width: 18
                                                 height: 18
                                                 radius: width / 2
-                                                color: "#22C55E"
-                                                border.color: "#16A34A"
+                                                color: root.accentSuccess
+                                                border.color: root.accentSuccessDark
                                                 border.width: 1
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: "\u2713"
-                                                    color: "#052E16"
+                                                    color: root.textSuccessDark
                                                     font.pixelSize: 12
                                                     font.bold: true
                                                 }
@@ -939,7 +1013,7 @@ Window {
                                         Layout.fillWidth: true
                                         visible: installState.pullErrorMessage.length > 0
                                         wrapMode: Text.WordWrap
-                                        color: "#F87171"
+                                        color: root.accentError
                                         text: installState.pullErrorMessage
                                     }
 
@@ -971,9 +1045,9 @@ Window {
                                         Rectangle {
                                             id: dockerLogPanel
                                             anchors.fill: parent
-                                            radius: 8
-                                            color: "#0A1022"
-                                            border.color: "#1F2A4A"
+                                            radius: 12
+                                            color: "#050811"
+                                            border.color: "#2D3B5F"
                                             border.width: 1
                                             clip: true
                                             opacity: installState.showLogs ? 1 : 0
@@ -991,13 +1065,90 @@ Window {
                                                     return;
                                                 dockerLogFlickable.contentY = Math.max(0, dockerLogFlickable.contentHeight - dockerLogFlickable.height);
                                             }
+
+                                            // Subtle gradient overlay
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: parent.radius
+                                                gradient: Gradient {
+                                                    GradientStop { position: 0.0; color: "#0A101800" }
+                                                    GradientStop { position: 1.0; color: "#0A101820" }
+                                                }
+                                            }
+
+                                            // Header bar with label
+                                            Rectangle {
+                                                anchors.top: parent.top
+                                                anchors.left: parent.left
+                                                anchors.right: parent.right
+                                                height: 32
+                                                color: "#0F1623"
+                                                radius: 12
+                                                Rectangle {
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.left: parent.left
+                                                    anchors.right: parent.right
+                                                    height: parent.radius
+                                                    color: parent.color
+                                                }
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 12
+                                                    anchors.rightMargin: 12
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: (installState.started || installState.awaitingAuth) ? "🐳" : "⚙"
+                                                        color: "#6EE7FF"
+                                                        font.pixelSize: 14
+                                                    }
+
+                                                    Text {
+                                                        text: (installState.started || installState.awaitingAuth) ? "Docker Pull Log" : "Installation Log"
+                                                        color: "#93C5FD"
+                                                        font.pixelSize: 11
+                                                        font.weight: Font.Medium
+                                                    }
+
+                                                    Item { Layout.fillWidth: true }
+
+                                                    Rectangle {
+                                                        width: 6
+                                                        height: 6
+                                                        radius: 3
+                                                        color: "#22C55E"
+                                                        opacity: 0.8
+                                                        visible: installTimer.running || AppController.installPrereqsRunning
+
+                                                        SequentialAnimation on opacity {
+                                                            running: installTimer.running || AppController.installPrereqsRunning
+                                                            loops: Animation.Infinite
+                                                            NumberAnimation { from: 0.3; to: 1.0; duration: 600 }
+                                                            NumberAnimation { from: 1.0; to: 0.3; duration: 600 }
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        text: (installTimer.running || AppController.installPrereqsRunning) ? "ACTIVE" : "IDLE"
+                                                        color: (installTimer.running || AppController.installPrereqsRunning) ? "#22C55E" : "#64748B"
+                                                        font.pixelSize: 10
+                                                        font.weight: Font.Bold
+                                                        font.letterSpacing: 0.5
+                                                    }
+                                                }
+                                            }
+
                                             Flickable {
                                                 id: dockerLogFlickable
                                                 anchors.fill: parent
-                                                anchors.margins: 10
+                                                anchors.topMargin: 42
+                                                anchors.leftMargin: 12
+                                                anchors.rightMargin: 12
+                                                anchors.bottomMargin: 12
                                                 clip: true
-                                                contentWidth: Math.max(width, dockerLogArea.contentWidth)
-                                                contentHeight: dockerLogArea.contentHeight
+                                                contentWidth: dockerLogText.implicitWidth
+                                                contentHeight: dockerLogText.implicitHeight
                                                 boundsBehavior: Flickable.StopAtBounds
                                                 ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
                                                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -1006,8 +1157,9 @@ Window {
                                                     if (dockerLogPanel.stickToBottom)
                                                         dockerLogPanel.scrollToBottom();
                                                 }
+
                                                 TextArea {
-                                                    id: dockerLogArea
+                                                    id: dockerLogText
                                                     text: (installState.started || installState.awaitingAuth)
                                                         ? (AppController.dockerPullLog.length ? AppController.dockerPullLog : "Waiting for docker output...")
                                                         : (AppController.installPrereqsLog.length
@@ -1018,12 +1170,14 @@ Window {
                                                     readOnly: true
                                                     textFormat: TextEdit.PlainText
                                                     wrapMode: TextEdit.NoWrap
-                                                    font.family: "Monospace"
+                                                    font.family: "JetBrains Mono, Consolas, Monaco, Monospace"
                                                     font.pixelSize: 12
-                                                    color: "#C7D2FE"
+                                                    color: (AppController.dockerPullLog.length || AppController.installPrereqsLog.length) ? "#E0E7FF" : "#64748B"
                                                     background: null
-                                                    width: dockerLogFlickable.contentWidth
-                                                    height: dockerLogArea.contentHeight
+                                                    width: implicitWidth
+                                                    height: implicitHeight
+                                                    bottomPadding: 10
+                                                    rightPadding: 10
                                                     onTextChanged: {
                                                         if (dockerLogPanel.stickToBottom)
                                                             dockerLogPanel.scrollToBottom();
@@ -1056,7 +1210,7 @@ Window {
 
                             AppCard {
                                 Layout.fillWidth: true
-                                title: "Finish"
+                                title: "Run"
                                 subtitle: "Installation completed"
                                 cardSpacing: 6
                                 contentItem: ColumnLayout {
@@ -1065,7 +1219,7 @@ Window {
                                         Layout.fillWidth: true
                                         Layout.topMargin: 1
                                         wrapMode: Text.WordWrap
-                                        color: "#93C5FD"
+                                        color: root.textInfo
                                         text: "Safecore has been installed successfully on your device."
                                     }
                                     Item { height: 50 }
@@ -1081,20 +1235,20 @@ Window {
                                                 width: 20
                                                 height: 20
                                                 radius: 4
-                                                color: launchCheck.checked ? "#6EE7FF" : "#0A1022"
-                                                border.color: launchCheck.checked ? "#93C5FD" : "#1F2A4A"
+                                                color: launchCheck.checked ? root.accent : root.bgLog
+                                                border.color: launchCheck.checked ? root.textInfo : root.borderPrimary
                                                 border.width: 1
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: launchCheck.checked ? "\u2713" : ""
-                                                    color: "#0B1220"
+                                                    color: root.bgPrimary
                                                     font.pixelSize: 13
                                                     font.bold: true
                                                 }
                                             }
                                             Text {
                                                 text: launchCheck.text
-                                                color: "#E2E8F0"
+                                                color: root.textPrimary
                                                 font.pixelSize: 15
                                                 verticalAlignment: Text.AlignVCenter
                                             }
@@ -1105,8 +1259,8 @@ Window {
                                         Layout.fillWidth: true
                                         Layout.topMargin: 6
                                         wrapMode: Text.WordWrap
-                                        color: '#B8C2E0'
-                                        text: "Click Finish to close the SafeCore Setup."
+                                        color: root.textSecondary
+                                        text: "Click Run to Start the SafeCore."
                                         font.pixelSize: 13
                                     }
                                     Item { height: 6 }
@@ -1127,23 +1281,37 @@ Window {
                     implicitHeight: header.height + contentItem.implicitHeight + 24
                     header: Rectangle {
                         height: 44
-                        color: "#151B2A"
-                        border.color: "#1F2A4A"
+                        color: root.bgPopup
+                        border.color: root.borderPrimary
                         border.width: 1
-                        Text {
+                        Row {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
                             anchors.leftMargin: 18
-                            text: quitDialog.title
-                            color: "#E2E8F0"
-                            font.pixelSize: 16
-                            font.bold: true
+                            spacing: 8
+                            Image {
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "qrc:/images/icons/quit_icon.png"
+                                width: 18
+                                height: 18
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                sourceSize.width: 18
+                                sourceSize.height: 18
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: quitDialog.title
+                                color: root.textPrimary
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
                         }
                     }
                     background: Rectangle {
                         radius: 14
-                        color: "#151B2A"
-                        border.color: "#1F2A4A"
+                        color: root.bgPopup
+                        border.color: root.borderPrimary
                         border.width: 1
                     }
 
@@ -1160,7 +1328,7 @@ Window {
                         Text {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            color: "#B8C2E0"
+                            color: root.textSecondary
                             text: quitDialog.messageText
                         }
 
@@ -1173,7 +1341,7 @@ Window {
                                 AppButton {
                                     text: "No"
                                     enabled: true
-                                    accent: "#374151"
+                                    accent: root.buttonSecondary
                                     onClicked: quitDialog.close()
                                 }
                                 AppButton {
@@ -1203,23 +1371,23 @@ Window {
                     implicitHeight: header.height + contentItem.implicitHeight + 24
                     header: Rectangle {
                         height: 44
-                        color: "#151B2A"
-                        border.color: "#1F2A4A"
+                        color: root.bgPopup
+                        border.color: root.borderPrimary
                         border.width: 1
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
                             anchors.leftMargin: 18
                             text: cancelDialog.title
-                            color: "#E2E8F0"
+                            color: root.textPrimary
                             font.pixelSize: 16
                             font.bold: true
                         }
                     }
                     background: Rectangle {
                         radius: 14
-                        color: "#151B2A"
-                        border.color: "#1F2A4A"
+                        color: root.bgPopup
+                        border.color: root.borderPrimary
                         border.width: 1
                     }
                     contentItem: Item {
@@ -1234,8 +1402,8 @@ Window {
                             Text {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
-                                color: "#B8C2E0"
-                                text: "Do you want to cancel the current operation?"
+                                color: root.textSecondary
+                                text: "Do you want to cancel pulling the docker image?"
                             }
 
                             Item { Layout.fillHeight: true }
@@ -1247,13 +1415,13 @@ Window {
                                 AppButton {
                                     text: "No"
                                     enabled: true
-                                    accent: "#374151"
+                                    accent: root.buttonSecondary
                                     onClicked: cancelDialog.close()
                                 }
                                     AppButton {
                                         text: "Yes"
                                         enabled: true
-                                        accent: "#F87171"
+                                        accent: root.accentError
                                         onClicked: {
                                             cancelDialog.close()
                                             if (AppController.installPrereqsRunning) {
@@ -1264,13 +1432,10 @@ Window {
                                                 installState.pullErrorMessage = "Docker installation canceled."
                                                 return
                                             }
+                                            // Set cancelPending first, then cancel - let onDockerPullFinished handle the reset
                                             installState.cancelPending = true
+                                            installState.statusText = "Canceling..."
                                             AppController.cancelDockerPull()
-                                            AppController.clearDockerPullLog()
-                                            installTimer.stop()
-                                            installState.reset()
-                                            installPage.slideIndex = 0
-                                            installState.statusText = "Ready to Install."
                                     }
                                 }
                             }
@@ -1323,8 +1488,8 @@ Window {
             id: track
             anchors.fill: parent
             radius: height / 2
-            color: "#0A1022"
-            border.color: "#1F2A4A"
+            color: root.bgLog
+            border.color: root.borderPrimary
             border.width: 1
             clip: true
 
@@ -1337,8 +1502,8 @@ Window {
                 property real v: Math.max(0.0, Math.min(1.0, mp.value))
                 width: Math.max(height, (track.width - 2 * mp.pad) * v)
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: "#6EE7FF" }
-                    GradientStop { position: 1.0; color: "#A78BFA" }
+                    GradientStop { position: 0.0; color: root.accent }
+                    GradientStop { position: 1.0; color: root.accent2 }
                 }
                 Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
             }
@@ -1349,7 +1514,7 @@ Window {
                 height: 14
                 radius: width / 2
                 y: (track.height - height) / 2
-                color: "#BFE8FF"
+                color: root.shimmerLight
                 property real innerW: (track.width - 2 * mp.pad)
                 property real v: Math.max(0.0, Math.min(1.0, mp.value))
                 x: {

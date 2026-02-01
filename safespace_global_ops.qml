@@ -7,6 +7,8 @@ Window {
     id: opsRoot
     width: 1100
     height: 680
+    minimumWidth: 1100
+    minimumHeight: 680
     visible: true
     title: "SafeCore"
     color: "#0B1220"
@@ -14,6 +16,14 @@ Window {
     property color accent: "#6EE7FF"
     property bool allowClose: false
     property bool showContainerLogs: false
+    property var activeDialog: null
+    // Dynamic console height based on window size
+    // Calculate as percentage of window height minus reserved space
+    property int consoleHeight: {
+        var reservedSpace = 50 + 100 + 150; // margins + header + buttons/spacing
+        var availableHeight = opsRoot.height - reservedSpace;
+        return Math.max(320, Math.floor(availableHeight * 0.85));
+    }
 
     Component.onCompleted: {
         x = (Screen.width - width) / 2
@@ -26,6 +36,13 @@ Window {
         if (allowClose)
             return;
         close.accepted = false;
+
+        // If another dialog is already open, blink it instead of opening quit dialog
+        if (opsRoot.activeDialog) {
+            opsRoot.activeDialog.blinkDialog();
+            return;
+        }
+
         quitDialog.open();
     }
     Connections {
@@ -53,98 +70,269 @@ Window {
         modal: false
         dim: false
         interactive: true
-        width: 220
+        width: 240
         height: parent.height
+
+        // Enhanced background with gradient
         background: Rectangle {
-            color: "#0E1730"
-            border.color: "#1F2A4A"
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#0A0F1C" }
+                GradientStop { position: 0.5; color: "#0E1730" }
+                GradientStop { position: 1.0; color: "#0A0F1C" }
+            }
+            border.color: "#2D3B5F"
             border.width: 1
+
+            // Subtle overlay
+            Rectangle {
+                anchors.fill: parent
+                color: "#050811"
+                opacity: 0.3
+            }
         }
+        
         contentItem: ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 12
-            Text {
-                text: "SafeCore"
-                color: "#E2E8F0"
-                font.pixelSize: 16
-                font.bold: true
-            }
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#1F2A4A" }
+            anchors.margins: 18
+            spacing: 16
+
+            // Header with logo/title
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 8
+
+                Text {
+                    text: "SafeCore"
+                    color: "#FFFFFF"
+                    font.pixelSize: 18
+                    font.weight: Font.Bold
+                    font.letterSpacing: 0.5
+                }
+
+                Text {
+                    text: "Control Center"
+                    color: "#6EE7FF"
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                    opacity: 0.8
+                }
+            }
+
+            // Stylish separator
+            Rectangle {
+                Layout.fillWidth: true
+                height: 2
+                radius: 1
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#2D3B5F" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Menu items
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
                 Repeater {
                     model: [
-                        { label: "Upgrade", icon: "qrc:/images/drawer/upgrade_icon.png" },
-                        { label: "Reset", icon: "qrc:/images/drawer/reset_icon.png" },
-                        { label: "Repair", icon: "qrc:/images/drawer/repair_icon.png" }
+                        { label: "Upgrade", icon: "qrc:/images/drawer/upgrade_icon.png", description: "Update container image" },
+                        { label: "Repair", icon: "qrc:/images/drawer/repair_icon.png", description: "Restart container" }
                     ]
-                    delegate: ColumnLayout {
+
+                    delegate: Item {
                         Layout.fillWidth: true
-                        spacing: 8
-                        Item {
-                            Layout.fillWidth: true
-                            height: 40
+                        height: 56
+
+                        Rectangle {
+                            id: menuItemBg
+                            anchors.fill: parent
+                            radius: 10
+                            color: hoverArea.containsMouse ? "#050811" : "transparent"
+                            border.color: hoverArea.containsMouse ? "#2D3B5F" : "transparent"
+                            border.width: 1
+
+                            Behavior on color { ColorAnimation { duration: 200 } }
+                            Behavior on border.color { ColorAnimation { duration: 200 } }
+
+                            // Glow effect on hover
                             Rectangle {
-                                radius: 8
                                 anchors.fill: parent
-                                color: hoverArea.containsMouse ? "#0A1022" : "transparent"
-                            }
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 6
-                                spacing: 8
-                                Image {
-                                    width: 14
-                                    height: 14
-                                    source: modelData.icon
-                                    fillMode: Image.PreserveAspectFit
-                                    smooth: true
-                                    sourceSize.width: 14
-                                    sourceSize.height: 14
-                                }
-                                Text {
-                                    text: modelData.label
-                                    color: "#E2E8F0"
-                                    font.pixelSize: 15
-                                }
-                                Item { Layout.fillWidth: true }
-                            }
-                            MouseArea {
-                                id: hoverArea
-                                anchors.fill: parent
-                                hoverEnabled: true
+                                radius: parent.radius
+                                color: "transparent"
+                                border.color: opsRoot.accent
+                                border.width: hoverArea.containsMouse ? 1 : 0
+                                opacity: hoverArea.containsMouse ? 0.3 : 0
+                                Behavior on opacity { NumberAnimation { duration: 200 } }
                             }
                         }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: "#1F2A4A" }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 2
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+
+                                // Icon with glow
+                                Item {
+                                    width: 20
+                                    height: 20
+
+                                    Image {
+                                        id: menuIcon
+                                        anchors.centerIn: parent
+                                        width: 18
+                                        height: 18
+                                        source: modelData.icon
+                                        fillMode: Image.PreserveAspectFit
+                                        smooth: true
+                                        sourceSize.width: 18
+                                        sourceSize.height: 18
+                                        opacity: hoverArea.containsMouse ? 1.0 : 0.8
+
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                    }
+
+                                    // Icon glow on hover
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: 24
+                                        height: 24
+                                        radius: 12
+                                        color: opsRoot.accent
+                                        opacity: hoverArea.containsMouse ? 0.15 : 0
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+
+                                    Text {
+                                        text: modelData.label
+                                        color: hoverArea.containsMouse ? "#FFFFFF" : "#E0E7FF"
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                        Behavior on color { ColorAnimation { duration: 200 } }
+                                    }
+
+                                    Text {
+                                        text: modelData.description
+                                        color: "#93C5FD"
+                                        font.pixelSize: 10
+                                        opacity: 0.7
+                                    }
+                                }
+
+                                // Arrow indicator
+                                Text {
+                                    text: "›"
+                                    color: opsRoot.accent
+                                    font.pixelSize: 20
+                                    font.bold: true
+                                    opacity: hoverArea.containsMouse ? 1.0 : 0.0
+                                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            id: hoverArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+
+                            onClicked: {
+                                // If a dialog is already open, blink it instead of opening new one
+                                if (opsRoot.activeDialog) {
+                                    opsRoot.activeDialog.blinkDialog()
+                                    return
+                                }
+
+                                if (modelData.label === "Upgrade") {
+                                    sideDrawer.close()
+                                    if (AppController.dockerOpsRunning) {
+                                        upgradeWarningDialog.open()
+                                    } else {
+                                        upgradeDialog.open()
+                                        AppController.startUpgrade()
+                                    }
+                                } else if (modelData.label === "Repair") {
+                                    sideDrawer.close()
+                                    if (AppController.dockerOpsRunning) {
+                                        repairDialog.open()
+                                    } else {
+                                        AppController.runDockerOps()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+
             Item { Layout.fillHeight: true }
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#1F2A4A" }
-            Text {
-                text: "safecore_installer_v_0.1"
-                color: "#64748B"
-                font.pixelSize: 11
-                horizontalAlignment: Text.AlignHCenter
+
+            // Stylish separator
+            Rectangle {
                 Layout.fillWidth: true
+                height: 2
+                radius: 1
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.5; color: "#2D3B5F" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+
+            // Footer version text
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Text {
+                    text: "safecore_installer"
+                    color: "#64748B"
+                    font.pixelSize: 10
+                    font.weight: Font.Medium
+                    font.letterSpacing: 0.5
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: "v1.0"
+                    color: "#6EE7FF"
+                    font.pixelSize: 9
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                    opacity: 0.6
+                }
             }
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 28
-        spacing: 18
+        anchors.leftMargin: 28
+        anchors.rightMargin: 28
+        anchors.topMargin: 20
+        anchors.bottomMargin: 20
 
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
             Rectangle {
                 id: drawerButton
-                width: 32
-                height: 32
+                width: 40
+                height: 40
                 radius: 8
                 color: "#151B2A"
                 border.color: "#1F2A4A"
@@ -154,8 +342,8 @@ Window {
                 Image {
                     anchors.centerIn: parent
                     source: "qrc:/images/drawer/drawer_icon.png"
-                    width: 18
-                    height: 18
+                    width: 24
+                    height: 24
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                 }
@@ -199,22 +387,74 @@ Window {
             }
         }
 
+        Item { height: 3 }
+
+        // Stylish separator
+        Rectangle {
+            Layout.fillWidth: true
+            height: 2
+            radius: 1
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 0.5; color: "#2D3B5F" }
+                GradientStop { position: 1.0; color: "transparent" }
+            }
+        }
+
+        Item { height: 3 }
+
         AppCard {
             Layout.fillWidth: true
             title: "Safecore Manage Program"
             subtitle: "Control the SafeCore container lifecycle on this machine."
             contentItem: ColumnLayout {
                 spacing: 10
+
+                // Status indicator row
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: 16
+
+                    // Container status indicator with animation
+                    Rectangle {
+                        width: 12
+                        height: 12
+                        radius: 6
+                        color: AppController.dockerOpsRunning ? "#22C55E" : "#64748B"
+
+                        SequentialAnimation on opacity {
+                            running: AppController.dockerOpsRunning
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 1.0; to: 0.3; duration: 800 }
+                            NumberAnimation { from: 0.3; to: 1.0; duration: 800 }
+                        }
+
+                        // Glow effect when running
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width * 2
+                            height: parent.height * 2
+                            radius: width / 2
+                            color: "transparent"
+                            border.color: AppController.dockerOpsRunning ? "#22C55E" : "transparent"
+                            border.width: 2
+                            opacity: 0.3
+                            visible: AppController.dockerOpsRunning
+                        }
+                    }
+
                     Text {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        color: "#93C5FD"
+                        color: AppController.dockerOpsRunning ? "#22C55E" : "#93C5FD"
                         font.pixelSize: 13
-                        text: "Start the SafeCore container with the latest settings pulled from your tenant configuration."
+                        font.weight: Font.Medium
+                        text: AppController.dockerOpsRunning
+                            ? "Container is running • Real-time monitoring active"
+                            : "Start the SafeCore container with the latest settings pulled from your tenant configuration."
                     }
+
                     AppButton {
                         text: opsRoot.showContainerLogs ? "Hide Logs" : "Show Logs"
                         accent: opsRoot.accent
@@ -231,27 +471,113 @@ Window {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 1
-                    color: "#1F2A4A"
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: (AppController.dockerOpsRunning || AppController.dockerOpsLog.length > 0) ? 320 : 0
-                    radius: 10
-                    color: "#0A1022"
-                    border.color: "#1F2A4A"
+                    Layout.preferredHeight: (AppController.dockerOpsRunning || AppController.dockerOpsLog.length > 0) ? opsRoot.consoleHeight : 0
+                    radius: 12
+                    color: "#050811"
+                    border.color: "#2D3B5F"
                     border.width: 1
                     visible: !opsRoot.showContainerLogs && (AppController.dockerOpsRunning || AppController.dockerOpsLog.length > 0)
+
+                    property bool autoScroll: true
+
+                    // Subtle gradient overlay
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "#0A101800" }
+                            GradientStop { position: 1.0; color: "#0A101820" }
+                        }
+                    }
+
+                    // Header bar with label
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 32
+                        color: "#0F1623"
+                        radius: 12
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: parent.radius
+                            color: parent.color
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            Text {
+                                text: "⚙"
+                                color: "#6EE7FF"
+                                font.pixelSize: 14
+                            }
+
+                            Text {
+                                text: "Docker Operations Log"
+                                color: "#93C5FD"
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Rectangle {
+                                width: 6
+                                height: 6
+                                radius: 3
+                                color: "#22C55E"
+                                opacity: 0.8
+                                visible: AppController.dockerOpsRunning
+
+                                SequentialAnimation on opacity {
+                                    running: AppController.dockerOpsRunning
+                                    loops: Animation.Infinite
+                                    NumberAnimation { from: 0.3; to: 1.0; duration: 600 }
+                                    NumberAnimation { from: 1.0; to: 0.3; duration: 600 }
+                                }
+                            }
+
+                            Text {
+                                text: AppController.dockerOpsRunning ? "ACTIVE" : "IDLE"
+                                color: AppController.dockerOpsRunning ? "#22C55E" : "#64748B"
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.5
+                            }
+                        }
+                    }
+
                     Flickable {
                         id: opsLogFlickable
                         anchors.fill: parent
-                        anchors.margins: 10
+                        anchors.topMargin: 42
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.bottomMargin: 12
                         clip: true
-                        contentWidth: Math.max(width, opsLog.contentWidth)
-                        contentHeight: opsLog.contentHeight
+                        contentWidth: opsLog.implicitWidth
+                        contentHeight: opsLog.implicitHeight
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                        onContentHeightChanged: {
+                            if (parent.autoScroll) {
+                                contentY = Math.max(0, contentHeight - height);
+                            }
+                        }
+
+                        onContentYChanged: {
+                            var maxY = Math.max(0, contentHeight - height);
+                            parent.autoScroll = (contentY >= maxY - 10);
+                        }
+
                         TextArea {
                             id: opsLog
                             text: AppController.dockerOpsLog.length
@@ -260,77 +586,249 @@ Window {
                             readOnly: true
                             textFormat: TextEdit.PlainText
                             wrapMode: TextEdit.NoWrap
-                            font.family: "Monospace"
+                            font.family: "JetBrains Mono, Consolas, Monaco, Monospace"
                             font.pixelSize: 12
-                            color: "#C7D2FE"
+                            color: AppController.dockerOpsLog.length ? "#E0E7FF" : "#64748B"
                             background: null
-                            width: opsLogFlickable.contentWidth
+                            width: implicitWidth
+                            height: implicitHeight
+                            bottomPadding: 10
+                            rightPadding: 10
                         }
                     }
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: opsRoot.showContainerLogs ? 320 : 0
-                    radius: 10
-                    color: "#0A1022"
-                    border.color: "#1F2A4A"
+                    Layout.preferredHeight: opsRoot.showContainerLogs ? opsRoot.consoleHeight : 0
+                    radius: 12
+                    color: "#050811"
+                    border.color: "#2D3B5F"
                     border.width: 1
                     visible: opsRoot.showContainerLogs
+
+                    property bool autoScrollFollow: true
+
+                    // Subtle gradient overlay
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "#0A101800" }
+                            GradientStop { position: 1.0; color: "#0A101820" }
+                        }
+                    }
+
+                    // Header bar with label
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 32
+                        color: "#0F1623"
+                        radius: 12
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: parent.radius
+                            color: parent.color
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            spacing: 8
+
+                            Text {
+                                text: "📡"
+                                color: "#6EE7FF"
+                                font.pixelSize: 14
+                            }
+
+                            Text {
+                                text: "Live Container Logs"
+                                color: "#93C5FD"
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Rectangle {
+                                width: 6
+                                height: 6
+                                radius: 3
+                                color: "#22C55E"
+                                opacity: 0.8
+
+                                SequentialAnimation on opacity {
+                                    running: true
+                                    loops: Animation.Infinite
+                                    NumberAnimation { from: 0.3; to: 1.0; duration: 600 }
+                                    NumberAnimation { from: 1.0; to: 0.3; duration: 600 }
+                                }
+                            }
+
+                            Text {
+                                text: "STREAMING"
+                                color: "#22C55E"
+                                font.pixelSize: 10
+                                font.weight: Font.Bold
+                                font.letterSpacing: 0.5
+                            }
+                        }
+                    }
+
                     Flickable {
                         id: opsLogFollowFlickable
                         anchors.fill: parent
-                        anchors.margins: 10
+                        anchors.topMargin: 42
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.bottomMargin: 12
                         clip: true
-                        contentWidth: Math.max(width, opsLogFollow.contentWidth)
-                        contentHeight: opsLogFollow.contentHeight
+                        contentWidth: opsLogFollow.implicitWidth
+                        contentHeight: opsLogFollow.implicitHeight
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                        onContentHeightChanged: {
+                            if (parent.autoScrollFollow) {
+                                contentY = Math.max(0, contentHeight - height);
+                            }
+                        }
+
+                        onContentYChanged: {
+                            var maxY = Math.max(0, contentHeight - height);
+                            parent.autoScrollFollow = (contentY >= maxY - 10);
+                        }
+
                         TextArea {
                             id: opsLogFollow
                             text: AppController.dockerOpsFollowLog.length
                                 ? AppController.dockerOpsFollowLog
-                                : "Docker output will appear here..."
+                                : "Waiting for container logs..."
                             readOnly: true
                             textFormat: TextEdit.PlainText
                             wrapMode: TextEdit.NoWrap
-                            font.family: "Monospace"
+                            font.family: "JetBrains Mono, Consolas, Monaco, Monospace"
                             font.pixelSize: 12
-                            color: "#C7D2FE"
+                            color: AppController.dockerOpsFollowLog.length ? "#E0E7FF" : "#64748B"
                             background: null
-                            width: opsLogFollowFlickable.contentWidth
+                            width: implicitWidth
+                            height: implicitHeight
+                            bottomPadding: 10
+                            rightPadding: 10
                         }
                     }
                 }
-                Item { height: 3}
+                Item { height: 3 }
             }
         }
+
         Item { Layout.fillHeight: true }
 
+        // Stylish separator
         Rectangle {
             Layout.fillWidth: true
-            height: 1
-            color: "#1F2A4A"
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 12
-            Item { Layout.fillWidth: true }
-            AppButton {
-                text: "Run All"
-                loading: AppController.dockerOpsStarting
-                loadingText: "Starting..."
-                accent: opsRoot.accent
-                enabled: !AppController.dockerOpsRunning && !AppController.dockerOpsStarting && !AppController.dockerOpsStopping
-                onClicked: AppController.runDockerOps()
+            height: 2
+            radius: 1
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 0.5; color: "#2D3B5F" }
+                GradientStop { position: 1.0; color: "transparent" }
             }
-            AppButton {
-                text: "Stop All"
-                loading: AppController.dockerOpsStopping
-                loadingText: "Stopping..."
-                accent: "#F87171"
-                enabled: AppController.dockerOpsRunning && !AppController.dockerOpsStarting && !AppController.dockerOpsStopping
-                onClicked: AppController.stopDockerOps()
+        }
+
+        Item { height: 3 }
+
+        // Enhanced control panel
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 80
+            color: "#0A0F1C"
+            border.color: "#1F2A4A"
+            border.width: 1
+            radius: 8
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 20
+
+                // Status info section
+                RowLayout {
+                    spacing: 12
+
+                    Rectangle {
+                        width: 40
+                        height: 40
+                        radius: 8
+                        color: AppController.dockerOpsRunning ? "#22C55E15" : "#64748B15"
+                        border.color: AppController.dockerOpsRunning ? "#22C55E" : "#64748B"
+                        border.width: 1
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: AppController.dockerOpsRunning ? "▶" : "■"
+                            color: AppController.dockerOpsRunning ? "#22C55E" : "#64748B"
+                            font.pixelSize: 18
+                            font.bold: true
+                        }
+                    }
+
+                    ColumnLayout {
+                        spacing: 2
+
+                        Text {
+                            text: "Container Status"
+                            color: "#64748B"
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                        }
+
+                        Text {
+                            text: AppController.dockerOpsStarting ? "Starting..." :
+                                  AppController.dockerOpsStopping ? "Stopping..." :
+                                  AppController.dockerOpsRunning ? "Running" : "Stopped"
+                            color: AppController.dockerOpsRunning ? "#22C55E" : "#93C5FD"
+                            font.pixelSize: 14
+                            font.weight: Font.Bold
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Control buttons
+                RowLayout {
+                    spacing: 12
+
+                    AppButton {
+                        text: "Start"
+                        loading: AppController.dockerOpsStarting
+                        loadingText: "Starting..."
+                        accent: opsRoot.accent
+                        enabled: !AppController.dockerOpsRunning && !AppController.dockerOpsStarting && !AppController.dockerOpsStopping
+                        implicitWidth: 120
+                        implicitHeight: 44
+                        onClicked: AppController.restartDockerOps()
+                    }
+
+                    AppButton {
+                        text: "Stop"
+                        loading: AppController.dockerOpsStopping
+                        loadingText: "Stopping..."
+                        accent: "#F87171"
+                        enabled: AppController.dockerOpsRunning && !AppController.dockerOpsStarting && !AppController.dockerOpsStopping
+                        implicitWidth: 120
+                        implicitHeight: 44
+                        onClicked: AppController.stopDockerOps()
+                    }
+                }
             }
         }
     }
@@ -342,21 +840,61 @@ Window {
         closePolicy: Popup.NoAutoClose
         title: "Quit SafeCore"
         anchors.centerIn: parent
-        implicitWidth: 380
+        implicitWidth: 650
         implicitHeight: header.height + contentItem.implicitHeight + 24
+
+        onOpened: opsRoot.activeDialog = quitDialog
+        onClosed: opsRoot.activeDialog = null
+
+        function blinkDialog() {
+            blinkAnimation.start()
+        }
+
+        SequentialAnimation {
+            id: blinkAnimation
+            NumberAnimation {
+                target: quitDialog
+                property: "opacity"
+                from: 1.0
+                to: 0.3
+                duration: 100
+            }
+            NumberAnimation {
+                target: quitDialog
+                property: "opacity"
+                from: 0.3
+                to: 1.0
+                duration: 100
+            }
+        }
+
         header: Rectangle {
             height: 44
             color: "#151B2A"
             border.color: "#1F2A4A"
             border.width: 1
-            Text {
+            Row {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
                 anchors.leftMargin: 18
-                text: quitDialog.title
-                color: "#E2E8F0"
-                font.pixelSize: 16
-                font.bold: true
+                spacing: 8
+                Image {
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: "qrc:/images/icons/quit_icon.png"
+                    width: 18
+                    height: 18
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    sourceSize.width: 18
+                    sourceSize.height: 18
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: quitDialog.title
+                    color: "#E2E8F0"
+                    font.pixelSize: 16
+                    font.bold: true
+                }
             }
         }
         background: Rectangle {
@@ -366,7 +904,9 @@ Window {
             border.width: 1
         }
 
-        property string messageText: "Do you want to quit SafeCore? The container will keep running."
+        property string messageText: AppController.dockerOpsRunning
+            ? "Do you want to quit SafeCore? The container will keep running."
+            : "Do you want to quit the SafeCore application?"
         contentItem: Item {
             implicitHeight: bodyLayout.implicitHeight
             implicitWidth: bodyLayout.implicitWidth
@@ -407,6 +947,773 @@ Window {
                     }
                 }
                 Item { height: 4 }
+            }
+        }
+    }
+
+    Dialog {
+        id: repairDialog
+        modal: true
+        title: "Repair"
+        anchors.centerIn: parent
+        implicitWidth: 650
+        implicitHeight: repairHeader.height + repairContentItem.implicitHeight + 24
+
+        onOpened: opsRoot.activeDialog = repairDialog
+        onClosed: opsRoot.activeDialog = null
+
+        function blinkDialog() {
+            repairBlinkAnimation.start()
+        }
+
+        SequentialAnimation {
+            id: repairBlinkAnimation
+            NumberAnimation {
+                target: repairDialog
+                property: "opacity"
+                from: 1.0
+                to: 0.3
+                duration: 100
+            }
+            NumberAnimation {
+                target: repairDialog
+                property: "opacity"
+                from: 0.3
+                to: 1.0
+                duration: 100
+            }
+        }
+
+        header: Rectangle {
+            id: repairHeader
+            height: 44
+            color: "#151B2A"
+            border.color: "#1F2A4A"
+            border.width: 1
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 18
+                spacing: 8
+                Image {
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: "qrc:/images/drawer/repair_icon.png"
+                    width: 18
+                    height: 18
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    sourceSize.width: 18
+                    sourceSize.height: 18
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: repairDialog.title
+                    color: "#E2E8F0"
+                    font.pixelSize: 16
+                    font.bold: true
+                }
+            }
+        }
+        background: Rectangle {
+            radius: 14
+            color: "#151B2A"
+            border.color: "#1F2A4A"
+            border.width: 1
+        }
+        contentItem: Item {
+            id: repairContentItem
+            implicitHeight: repairBodyLayout.implicitHeight
+            implicitWidth: repairBodyLayout.implicitWidth
+            ColumnLayout {
+                id: repairBodyLayout
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 12
+
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: "#B8C2E0"
+                    text: "Before repairing the SafeCore application, please stop the container first."
+                }
+
+                Item { Layout.fillHeight: true }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Item { Layout.fillWidth: true }
+                    AppButton {
+                        text: "OK"
+                        enabled: true
+                        accent: opsRoot.accent
+                        onClicked: repairDialog.close()
+                    }
+                }
+                Item { height: 6 }
+            }
+        }
+    }
+    Dialog {
+        id: upgradeWarningDialog
+        modal: true
+        title: "Container Running"
+        anchors.centerIn: parent
+        implicitWidth: 650
+        implicitHeight: upgradeWarningHeader.height + upgradeWarningContentItem.implicitHeight + 24
+
+        onOpened: opsRoot.activeDialog = upgradeWarningDialog
+        onClosed: opsRoot.activeDialog = null
+
+        function blinkDialog() {
+            upgradeWarningBlinkAnimation.start()
+        }
+
+        SequentialAnimation {
+            id: upgradeWarningBlinkAnimation
+            NumberAnimation {
+                target: upgradeWarningDialog
+                property: "opacity"
+                from: 1.0
+                to: 0.3
+                duration: 100
+            }
+            NumberAnimation {
+                target: upgradeWarningDialog
+                property: "opacity"
+                from: 0.3
+                to: 1.0
+                duration: 100
+            }
+        }
+
+        header: Rectangle {
+            id: upgradeWarningHeader
+            height: 44
+            color: "#151B2A"
+            border.color: "#1F2A4A"
+            border.width: 1
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 18
+                spacing: 8
+                Image {
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: "qrc:/images/drawer/upgrade_icon.png"
+                    width: 18
+                    height: 18
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    sourceSize.width: 18
+                    sourceSize.height: 18
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: upgradeWarningDialog.title
+                    color: "#E2E8F0"
+                    font.pixelSize: 16
+                    font.bold: true
+                }
+            }
+        }
+        background: Rectangle {
+            radius: 14
+            color: "#151B2A"
+            border.color: "#1F2A4A"
+            border.width: 1
+        }
+        contentItem: Item {
+            id: upgradeWarningContentItem
+            implicitHeight: upgradeWarningBodyLayout.implicitHeight
+            implicitWidth: upgradeWarningBodyLayout.implicitWidth
+            ColumnLayout {
+                id: upgradeWarningBodyLayout
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 12
+
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: "#B8C2E0"
+                    font.pixelSize: 14
+                    text: "Before upgrading the SafeCore application, stop the container."
+                }
+
+                Item { height: 8 }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+                    Item { Layout.fillWidth: true }
+                    AppButton {
+                        text: "OK"
+                        enabled: true
+                        accent: opsRoot.accent
+                        onClicked: upgradeWarningDialog.close()
+                    }
+                }
+                Item { height: 6 }
+            }
+        }
+    }
+
+    Dialog {
+        id: upgradeDialog
+        modal: true
+        title: "Upgrade"
+        anchors.centerIn: parent
+        implicitWidth: 650
+        implicitHeight: upgradeHeader.height + upgradeContentItem.implicitHeight + 24
+        closePolicy: AppController.upgradeRunning ? Popup.NoAutoClose : Popup.CloseOnEscape
+
+        function blinkDialog() {
+            upgradeBlinkAnimation.start()
+        }
+
+        SequentialAnimation {
+            id: upgradeBlinkAnimation
+            NumberAnimation {
+                target: upgradeDialog
+                property: "opacity"
+                from: 1.0
+                to: 0.3
+                duration: 100
+            }
+            NumberAnimation {
+                target: upgradeDialog
+                property: "opacity"
+                from: 0.3
+                to: 1.0
+                duration: 100
+            }
+        }
+
+        property bool upgradeAvailable: false
+        property bool upgradeComplete: false
+        property bool upgradeDownloading: false
+        property bool upgradeCanceled: false
+        property string statusMessage: ""
+        property bool showLogs: true
+        property int slideIndex: 0
+        property var slideSources: [
+            "qrc:/images/ai/image1.jpg",
+            "qrc:/images/ai/image2.jpg",
+            "qrc:/images/ai/image3.jpg",
+            "qrc:/images/ai/image4.jpg",
+            "qrc:/images/ai/image5.jpg"
+        ]
+
+        onOpened: {
+            opsRoot.activeDialog = upgradeDialog
+            upgradeAvailable = false
+            upgradeComplete = false
+            upgradeDownloading = false
+            upgradeCanceled = false
+            statusMessage = ""
+            showLogs = true
+            slideIndex = 0
+            upgradeSlideTimer.start()
+        }
+
+        onClosed: {
+            opsRoot.activeDialog = null
+            upgradeSlideTimer.stop()
+        }
+
+        Timer {
+            id: upgradeSlideTimer
+            interval: 3000
+            repeat: true
+            running: upgradeDialog.visible && !upgradeDialog.showLogs
+            onTriggered: {
+                upgradeDialog.slideIndex = (upgradeDialog.slideIndex + 1) % upgradeDialog.slideSources.length
+            }
+        }
+
+        Connections {
+            target: AppController
+            function onUpgradeFinished(hasUpdate, message) {
+                upgradeDialog.upgradeComplete = true
+                upgradeDialog.statusMessage = message
+                upgradeDialog.upgradeAvailable = hasUpdate
+                upgradeDialog.upgradeCanceled = message.startsWith("Upgrade canceled.")
+            }
+            function onUpgradeLogChanged() {
+                // Detect if download is actually happening (not just "up to date" check)
+                // Only show console when we see actual download activity
+                if (AppController.upgradeRunning && !upgradeDialog.upgradeDownloading) {
+                    const log = AppController.upgradeLog;
+                    // Check for actual download indicators, not just "Pulling from"
+                    if (log.includes("Pulling fs layer") ||
+                        log.includes("Downloading") ||
+                        log.includes("Download complete") ||
+                        log.includes("Pull complete") ||
+                        log.includes("Extracting") ||
+                        log.includes("Verifying Checksum") ||
+                        log.includes("Waiting")) {
+                        upgradeDialog.upgradeDownloading = true;
+                    }
+                }
+            }
+        }
+
+        header: Rectangle {
+            id: upgradeHeader
+            height: 44
+            color: "#151B2A"
+            border.color: "#1F2A4A"
+            border.width: 1
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 18
+                spacing: 8
+                Image {
+                    anchors.verticalCenter: parent.verticalCenter
+                    source: "qrc:/images/drawer/upgrade_icon.png"
+                    width: 18
+                    height: 18
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    sourceSize.width: 18
+                    sourceSize.height: 18
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: upgradeDialog.title
+                    color: "#E2E8F0"
+                    font.pixelSize: 16
+                    font.bold: true
+                }
+            }
+        }
+        background: Rectangle {
+            radius: 14
+            color: "#151B2A"
+            border.color: "#1F2A4A"
+            border.width: 1
+        }
+        contentItem: Item {
+            id: upgradeContentItem
+            implicitHeight: upgradeBodyLayout.implicitHeight
+            implicitWidth: upgradeBodyLayout.implicitWidth
+            ColumnLayout {
+                id: upgradeBodyLayout
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 12
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: !AppController.upgradeRunning && upgradeDialog.upgradeComplete && !upgradeDialog.upgradeAvailable
+
+                    Rectangle {
+                        width: 24
+                        height: 24
+                        radius: 12
+                        color: upgradeDialog.upgradeCanceled ? "#F59E0B" : "#22C55E"
+                        Text {
+                            anchors.centerIn: parent
+                            text: upgradeDialog.upgradeCanceled ? "\u26A0" : "\u2713"
+                            font.pixelSize: upgradeDialog.upgradeCanceled ? 14 : 16
+                            font.bold: true
+                            color: "#FFFFFF"
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: "#B8C2E0"
+                        text: upgradeDialog.statusMessage
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: AppController.upgradeRunning || (upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable)
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        // Animated loading spinner (only when checking, not downloading)
+                        Item {
+                            width: 24
+                            height: 24
+                            visible: AppController.upgradeRunning && !upgradeDialog.upgradeDownloading
+
+                            Canvas {
+                                id: spinnerCanvas
+                                anchors.fill: parent
+                                antialiasing: true
+
+                                property real rotation: 0
+
+                                onPaint: {
+                                    var ctx = getContext("2d");
+                                    ctx.clearRect(0, 0, width, height);
+                                    ctx.save();
+                                    ctx.translate(width / 2, height / 2);
+                                    ctx.rotate(rotation * Math.PI / 180);
+
+                                    // Draw circular segments
+                                    for (var i = 0; i < 8; i++) {
+                                        ctx.save();
+                                        ctx.rotate(i * Math.PI / 4);
+                                        ctx.beginPath();
+                                        var opacity = (i + 1) / 8;
+                                        ctx.fillStyle = Qt.rgba(0.38, 0.51, 0.96, opacity);
+                                        ctx.arc(7, 0, 2.5, 0, Math.PI * 2);
+                                        ctx.fill();
+                                        ctx.restore();
+                                    }
+                                    ctx.restore();
+                                }
+
+                                RotationAnimator {
+                                    target: spinnerCanvas
+                                    from: 0
+                                    to: 360
+                                    duration: 1200
+                                    loops: Animation.Infinite
+                                    running: AppController.upgradeRunning && !upgradeDialog.upgradeDownloading
+                                    onToChanged: spinnerCanvas.rotation = to
+                                }
+
+                                Timer {
+                                    interval: 16
+                                    running: AppController.upgradeRunning && !upgradeDialog.upgradeDownloading
+                                    repeat: true
+                                    onTriggered: {
+                                        spinnerCanvas.rotation = (spinnerCanvas.rotation + 3) % 360;
+                                        spinnerCanvas.requestPaint();
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: "#B8C2E0"
+                            text: AppController.upgradeRunning
+                                ? (upgradeDialog.upgradeDownloading ? "Downloading new image..." : "Checking for updates...")
+                                : (upgradeDialog.upgradeComplete ? upgradeDialog.statusMessage : "")
+                        }
+                    }
+
+                    // Progress bar with percentage (shown when downloading)
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: upgradeDialog.upgradeDownloading
+
+                        ModernProgressBar {
+                            Layout.fillWidth: true
+                            value: AppController.upgradeProgress
+                            busy: AppController.upgradeRunning
+                        }
+
+                        Text {
+                            color: "#93C5FD"
+                            font.pixelSize: 13
+                            text: Math.round(AppController.upgradeProgress * 100) + "%"
+                        }
+                    }
+                }
+
+                AppButton {
+                    text: upgradeDialog.showLogs ? "Hide Logs" : "Show Logs"
+                    visible: !upgradeDialog.upgradeCanceled && (upgradeDialog.upgradeDownloading || (upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable))
+                    onClicked: upgradeDialog.showLogs = !upgradeDialog.showLogs
+                    accent: opsRoot.accent
+                    implicitWidth: 110
+                    implicitHeight: 34
+                }
+
+                Item {
+                    id: upgradeSwapArea
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 300
+                    implicitHeight: 300
+                    Layout.bottomMargin: 0
+                    visible: !upgradeDialog.upgradeCanceled && (upgradeDialog.upgradeDownloading || (upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable))
+
+                    Rectangle {
+                        id: upgradeLogPanel
+                        anchors.fill: parent
+                        radius: 12
+                        color: "#050811"
+                        border.color: "#2D3B5F"
+                        border.width: 1
+                        clip: true
+                        opacity: upgradeDialog.showLogs ? 1 : 0
+                        enabled: upgradeDialog.showLogs
+                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+                        property bool stickToBottom: true
+                        function updateStickState() {
+                            if (!upgradeLogFlickable)
+                                return;
+                            var maxY = Math.max(0, upgradeLogFlickable.contentHeight - upgradeLogFlickable.height);
+                            stickToBottom = upgradeLogFlickable.contentY >= maxY - 4;
+                        }
+                        function scrollToBottom() {
+                            if (!upgradeLogFlickable)
+                                return;
+                            upgradeLogFlickable.contentY = Math.max(0, upgradeLogFlickable.contentHeight - upgradeLogFlickable.height);
+                        }
+
+                        // Subtle gradient overlay
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: "#0A101800" }
+                                GradientStop { position: 1.0; color: "#0A101820" }
+                            }
+                        }
+
+                        // Header bar with label
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: 32
+                            color: "#0F1623"
+                            radius: 12
+                            Rectangle {
+                                anchors.bottom: parent.bottom
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                height: parent.radius
+                                color: parent.color
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                spacing: 8
+
+                                Text {
+                                    text: "⬆"
+                                    color: "#6EE7FF"
+                                    font.pixelSize: 14
+                                }
+
+                                Text {
+                                    text: "Upgrade Log"
+                                    color: "#93C5FD"
+                                    font.pixelSize: 11
+                                    font.weight: Font.Medium
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                Rectangle {
+                                    width: 6
+                                    height: 6
+                                    radius: 3
+                                    color: "#22C55E"
+                                    opacity: 0.8
+                                    visible: AppController.upgradeRunning
+
+                                    SequentialAnimation on opacity {
+                                        running: AppController.upgradeRunning
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 0.3; to: 1.0; duration: 600 }
+                                        NumberAnimation { from: 1.0; to: 0.3; duration: 600 }
+                                    }
+                                }
+
+                                Text {
+                                    text: AppController.upgradeRunning ? "ACTIVE" : "IDLE"
+                                    color: AppController.upgradeRunning ? "#22C55E" : "#64748B"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 0.5
+                                }
+                            }
+                        }
+
+                        Flickable {
+                            id: upgradeLogFlickable
+                            anchors.fill: parent
+                            anchors.topMargin: 42
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
+                            anchors.bottomMargin: 12
+                            clip: true
+                            contentWidth: upgradeLogText.implicitWidth
+                            contentHeight: upgradeLogText.implicitHeight
+                            boundsBehavior: Flickable.StopAtBounds
+                            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            onContentYChanged: upgradeLogPanel.updateStickState()
+                            onContentHeightChanged: {
+                                if (upgradeLogPanel.stickToBottom)
+                                    upgradeLogPanel.scrollToBottom();
+                            }
+
+                            TextArea {
+                                id: upgradeLogText
+                                text: AppController.upgradeLog.length ? AppController.upgradeLog : "Waiting for output..."
+                                readOnly: true
+                                textFormat: TextEdit.PlainText
+                                wrapMode: TextEdit.NoWrap
+                                font.family: "JetBrains Mono, Consolas, Monaco, Monospace"
+                                font.pixelSize: 12
+                                color: AppController.upgradeLog.length ? "#E0E7FF" : "#64748B"
+                                background: null
+                                width: implicitWidth
+                                height: implicitHeight
+                                bottomPadding: 10
+                                rightPadding: 10
+                                onTextChanged: {
+                                    if (upgradeLogPanel.stickToBottom)
+                                        upgradeLogPanel.scrollToBottom();
+                                }
+                            }
+                        }
+                        Component.onCompleted: scrollToBottom()
+                    }
+
+                    Image {
+                        anchors.fill: parent
+                        fillMode: Image.Stretch
+                        source: upgradeDialog.slideSources.length
+                            ? upgradeDialog.slideSources[upgradeDialog.slideIndex]
+                            : ""
+                        opacity: upgradeDialog.showLogs ? 0 : 1
+                        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: "#1F2A4A"
+                    visible: upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Item { Layout.fillWidth: true }
+                    AppButton {
+                        text: "Cancel"
+                        visible: AppController.upgradeRunning
+                        enabled: true
+                        accent: "#F87171"
+                        onClicked: AppController.cancelUpgrade()
+                    }
+                    AppButton {
+                        text: "OK"
+                        visible: upgradeDialog.upgradeComplete && !upgradeDialog.upgradeAvailable
+                        enabled: true
+                        accent: opsRoot.accent
+                        onClicked: upgradeDialog.close()
+                    }
+                    AppButton {
+                        text: "Restart"
+                        visible: upgradeDialog.upgradeComplete && upgradeDialog.upgradeAvailable
+                        enabled: true
+                        accent: opsRoot.accent
+                        onClicked: {
+                            upgradeDialog.close()
+                            AppController.runDockerOps()
+                        }
+                    }
+                }
+                Item { height: 10 }
+            }
+        }
+    }
+
+    // Modern ProgressBar component
+    component ModernProgressBar : Item {
+        id: mp
+        property real value: 0.0
+        property bool busy: false
+
+        implicitHeight: 18
+        implicitWidth: 240
+        property int pad: 2
+
+        Rectangle {
+            id: track
+            anchors.fill: parent
+            radius: height / 2
+            color: "#0A0F1C"
+            border.color: "#1F2A4A"
+            border.width: 1
+            clip: true
+
+            Rectangle {
+                id: fill
+                x: mp.pad
+                y: mp.pad
+                height: track.height - 2 * mp.pad
+                radius: 10
+                property real v: Math.max(0.0, Math.min(1.0, mp.value))
+                width: Math.max(height, (track.width - 2 * mp.pad) * v)
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: opsRoot.accent }
+                    GradientStop { position: 1.0; color: "#38BDF8" }
+                }
+                Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            }
+
+            Rectangle {
+                id: dot
+                width: 14
+                height: 14
+                radius: width / 2
+                y: (track.height - height) / 2
+                color: "#FFFFFF"
+                property real innerW: (track.width - 2 * mp.pad)
+                property real v: Math.max(0.0, Math.min(1.0, mp.value))
+                x: {
+                    var left = mp.pad;
+                    var right = track.width - mp.pad - width;
+                    var pos = mp.pad + (innerW * v) - (width / 2);
+                    return Math.max(left, Math.min(right, pos));
+                }
+                Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            }
+
+            Rectangle {
+                id: shine
+                visible: mp.busy
+                y: mp.pad
+                height: track.height - 2 * mp.pad
+                width: 90
+                radius: 10
+                opacity: 0.22
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "#FFFFFF00" }
+                    GradientStop { position: 0.5; color: "#FFFFFFAA" }
+                    GradientStop { position: 1.0; color: "#FFFFFF00" }
+                }
+                x: -width
+                SequentialAnimation on x {
+                    running: mp.busy
+                    loops: Animation.Infinite
+                    NumberAnimation {
+                        from: -shine.width + 100
+                        to: track.width
+                        duration: 1100
+                        easing.type: Easing.InOutSine
+                    }
+                }
             }
         }
     }
