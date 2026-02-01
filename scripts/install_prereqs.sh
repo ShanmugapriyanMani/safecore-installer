@@ -32,22 +32,53 @@ wait_for_apt() {
   return 0
 }
 
+# Function to disable problematic apt repos
+disable_problematic_repos() {
+  DISABLED_REPOS=""
+  
+  # Check sources.list.d for .list files
+  if [ -d /etc/apt/sources.list.d ]; then
+    for repo in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+      if [ -f "$repo" ] && grep -q "nvidia-driver-local" "$repo" 2>/dev/null; then
+        echo "Temporarily disabling: $repo"
+        mv "$repo" "$repo.disabled" 2>/dev/null && DISABLED_REPOS="$DISABLED_REPOS $repo"
+      fi
+    done
+  fi
+  
+  # Also check for any files referencing the local repo path
+  for repo in $(grep -rl "file:/var/nvidia-driver-local" /etc/apt/ 2>/dev/null); do
+    if [ -f "$repo" ] && [ "${repo%.disabled}" = "$repo" ]; then
+      echo "Temporarily disabling: $repo"
+      mv "$repo" "$repo.disabled" 2>/dev/null && DISABLED_REPOS="$DISABLED_REPOS $repo"
+    fi
+  done
+}
+
+# Function to re-enable disabled repos
+reenable_repos() {
+  if [ -d /etc/apt/sources.list.d ]; then
+    for repo in /etc/apt/sources.list.d/*.disabled; do
+      if [ -f "$repo" ]; then
+        mv "$repo" "${repo%.disabled}" 2>/dev/null || true
+      fi
+    done
+  fi
+  # Re-enable any other disabled files
+  for repo in $(find /etc/apt/ -name "*.disabled" 2>/dev/null); do
+    if [ -f "$repo" ]; then
+      mv "$repo" "${repo%.disabled}" 2>/dev/null || true
+    fi
+  done
+}
+
 echo -e "\n${GREEN}[1/2] Checking Docker...${NC}"
 if ! docker --version >/dev/null 2>&1; then
   echo "Installing Docker..."
   
   # Fix any broken apt sources that might cause issues
   echo "Checking for problematic apt repositories..."
-  
-  # Temporarily disable unsigned/problematic local repos
-  if [ -d /etc/apt/sources.list.d ]; then
-    for repo in /etc/apt/sources.list.d/*.list; do
-      if [ -f "$repo" ] && grep -q "file:/var/nvidia-driver-local" "$repo" 2>/dev/null; then
-        echo "Temporarily disabling problematic repo: $repo"
-        mv "$repo" "$repo.disabled" 2>/dev/null || true
-      fi
-    done
-  fi
+  disable_problematic_repos
   
   echo "Downloading Docker install script..."
   if ! curl -fsSL https://get.docker.com -o /tmp/get-docker.sh; then
@@ -78,13 +109,7 @@ if ! docker --version >/dev/null 2>&1; then
   fi
   
   # Re-enable any disabled repos
-  if [ -d /etc/apt/sources.list.d ]; then
-    for repo in /etc/apt/sources.list.d/*.list.disabled; do
-      if [ -f "$repo" ]; then
-        mv "$repo" "${repo%.disabled}" 2>/dev/null || true
-      fi
-    done
-  fi
+  reenable_repos
 else
   echo "Docker already installed: $(docker --version)"
 fi
