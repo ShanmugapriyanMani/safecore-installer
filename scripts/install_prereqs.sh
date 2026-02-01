@@ -114,40 +114,54 @@ else
   echo "Docker already installed: $(docker --version)"
 fi
 
-echo -e "\n${GREEN}[2/2] Checking NVIDIA Container Toolkit...${NC}"
-if ! dpkg -l 2>/dev/null | grep -q nvidia-container-toolkit; then
-  echo "Installing NVIDIA Container Toolkit..."
-  
-  # Add NVIDIA GPG key
-  echo "Adding NVIDIA repository key..."
-  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-    gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null || true
-  
-  # Add NVIDIA repository
-  echo "Adding NVIDIA repository..."
-  curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null
-  
-  echo "Updating package lists..."
-  wait_for_apt
-  if ! apt-get update -qq; then
-    echo -e "${YELLOW}Warning: apt-get update had issues, continuing anyway...${NC}"
-  fi
-  
-  echo "Installing nvidia-container-toolkit package..."
-  wait_for_apt
-  if ! apt-get install -y nvidia-container-toolkit; then
-    echo -e "${RED}Failed to install NVIDIA Container Toolkit${NC}"
-    INSTALL_FAILED=true
-  else
-    echo -e "${GREEN}NVIDIA Container Toolkit installed successfully.${NC}"
-  fi
-else
-  echo "NVIDIA Container Toolkit already installed."
+# Check if NVIDIA GPU is present
+HAS_NVIDIA_GPU=false
+if lspci 2>/dev/null | grep -iq nvidia; then
+  HAS_NVIDIA_GPU=true
+elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+  HAS_NVIDIA_GPU=true
 fi
 
-if [ "$DOCKER_INSTALLED" = true ] || ! dpkg -l 2>/dev/null | grep -q nvidia-container-toolkit-base; then
+echo -e "\n${GREEN}[2/2] Checking NVIDIA Container Toolkit...${NC}"
+if [ "$HAS_NVIDIA_GPU" = true ]; then
+  if ! dpkg -l 2>/dev/null | grep -q nvidia-container-toolkit; then
+    echo "NVIDIA GPU detected. Installing NVIDIA Container Toolkit..."
+    
+    # Add NVIDIA GPG key
+    echo "Adding NVIDIA repository key..."
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+      gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null || true
+    
+    # Add NVIDIA repository
+    echo "Adding NVIDIA repository..."
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+      sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+      tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null
+    
+    echo "Updating package lists..."
+    wait_for_apt
+    if ! apt-get update -qq; then
+      echo -e "${YELLOW}Warning: apt-get update had issues, continuing anyway...${NC}"
+    fi
+    
+    echo "Installing nvidia-container-toolkit package..."
+    wait_for_apt
+    if ! apt-get install -y nvidia-container-toolkit; then
+      echo -e "${YELLOW}Warning: Failed to install NVIDIA Container Toolkit${NC}"
+      echo -e "${YELLOW}You can install it manually later if needed.${NC}"
+      # Don't fail the whole install for this
+    else
+      echo -e "${GREEN}NVIDIA Container Toolkit installed successfully.${NC}"
+    fi
+  else
+    echo "NVIDIA Container Toolkit already installed."
+  fi
+else
+  echo -e "${YELLOW}No NVIDIA GPU detected. Skipping NVIDIA Container Toolkit installation.${NC}"
+  echo "You can install it manually later if you add an NVIDIA GPU."
+fi
+
+if [ "$DOCKER_INSTALLED" = true ]; then
   echo -e "\n${YELLOW}Restarting Docker service...${NC}"
   if systemctl restart docker; then
     echo "Docker service restarted."
