@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SafeCore
+Comment=SafeCore Installer and Docker Ops
+Exec=/opt/safecore-installer/bin/Safecore
+Icon=safespace-global
+StartupWMClass=SafeCore
+Terminal=false
+Categories=Utility;
