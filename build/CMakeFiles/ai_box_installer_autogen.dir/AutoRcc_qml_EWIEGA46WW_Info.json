@@ -1,0 +1,27 @@
+{
+	"BUILD_DIR" : "/home/sandy/Documents/v1.0/safecore-installer/build/ai_box_installer_autogen",
+	"CMAKE_BINARY_DIR" : "/home/sandy/Documents/v1.0/safecore-installer/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "/home/sandy/Documents/v1.0/safecore-installer/build",
+	"CMAKE_CURRENT_SOURCE_DIR" : "/home/sandy/Documents/v1.0/safecore-installer",
+	"CMAKE_SOURCE_DIR" : "/home/sandy/Documents/v1.0/safecore-installer",
+	"GENERATOR" : "Ninja",
+	"INCLUDE_DIR" : "/home/sandy/Documents/v1.0/safecore-installer/build/ai_box_installer_autogen/include",
+	"INPUTS" : 
+	[
+		"/home/sandy/Documents/v1.0/safecore-installer/AppButton.qml",
+		"/home/sandy/Documents/v1.0/safecore-installer/StepRow.qml",
+		"/home/sandy/Documents/v1.0/safecore-installer/safespace_global_ops.qml",
+		"/home/sandy/Documents/v1.0/safecore-installer/AppCard.qml",
+		"/home/sandy/Documents/v1.0/safecore-installer/main.qml"
+	],
+	"LOCK_FILE" : "/home/sandy/Documents/v1.0/safecore-installer/build/CMakeFiles/ai_box_installer_autogen.dir/AutoRcc_qml_EWIEGA46WW_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "-name", "qml" ],
+	"OUTPUT_CHECKSUM" : "EWIEGA46WW",
+	"OUTPUT_NAME" : "qrc_qml.cpp",
+	"RCC_EXECUTABLE" : "/home/sandy/Qt/6.10.1/gcc_64/libexec/rcc",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "/home/sandy/Documents/v1.0/safecore-installer/build/CMakeFiles/ai_box_installer_autogen.dir/AutoRcc_qml_EWIEGA46WW_Used.txt",
+	"SOURCE" : "/home/sandy/Documents/v1.0/safecore-installer/qml.qrc",
+	"VERBOSITY" : 0
+}

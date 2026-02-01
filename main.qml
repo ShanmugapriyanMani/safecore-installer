@@ -13,49 +13,39 @@ Window {
     title: "SafeCore"
     flags: Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowCloseButtonHint
 
-    // Theme Colors - Background
-    readonly property color bgPrimary: "#0B1220"
-    readonly property color bgSecondary: "#111B33"
-    readonly property color bgCard: "#0E1730"
-    readonly property color bgInput: "#0F172A"
-    readonly property color bgInputDisabled: "#0B1220"
-    readonly property color bgPopup: "#151B2A"
-    readonly property color bgLog: "#0A1022"
+    // Theme aliases for backward compatibility
+    readonly property color bgPrimary: Theme.bgPrimary
+    readonly property color bgSecondary: Theme.bgSecondary
+    readonly property color bgCard: Theme.bgCard
+    readonly property color bgInput: Theme.bgInput
+    readonly property color bgInputDisabled: Theme.bgInputDisabled
+    readonly property color bgPopup: Theme.bgPopup
+    readonly property color bgLog: Theme.bgLog
+    readonly property color borderPrimary: Theme.borderPrimary
+    readonly property color borderSecondary: Theme.borderSecondary
+    readonly property color borderProgress: Theme.borderProgress
+    readonly property color accent: Theme.accent
+    readonly property color accent2: Theme.accent2
+    readonly property color accentError: Theme.accentError
+    readonly property color accentSuccess: Theme.accentSuccess
+    readonly property color accentSuccessDark: Theme.accentSuccessDark
+    readonly property color accentWarning: Theme.accentWarning
+    readonly property color accentWarningDark: Theme.accentWarningDark
+    readonly property color textPrimary: Theme.textPrimary
+    readonly property color textSecondary: Theme.textSecondary
+    readonly property color textMuted: Theme.textMuted
+    readonly property color textPlaceholder: Theme.textPlaceholder
+    readonly property color textInfo: Theme.textInfo
+    readonly property color textSuccess: Theme.textSuccess
+    readonly property color textError: Theme.textError
+    readonly property color textSuccessDark: Theme.textSuccessDark
+    readonly property color textErrorDark: Theme.textErrorDark
+    readonly property color textLog: Theme.textLog
+    readonly property color stepInactive: Theme.stepInactive
+    readonly property color buttonSecondary: Theme.buttonSecondary
+    readonly property color shimmerLight: Theme.shimmerLight
 
-    // Theme Colors - Border
-    readonly property color borderPrimary: "#1F2A4A"
-    readonly property color borderSecondary: "#344666"
-    readonly property color borderProgress: "#24324C"
-
-    // Theme Colors - Accent
-    readonly property color accent: "#6EE7FF"
-    readonly property color accent2: "#A78BFA"
-    readonly property color accentError: "#F87171"
-    readonly property color accentSuccess: "#22C55E"
-    readonly property color accentSuccessDark: "#16A34A"
-    readonly property color accentWarning: "#EF4444"
-    readonly property color accentWarningDark: "#DC2626"
-
-    // Theme Colors - Text
-    readonly property color textPrimary: "#E2E8F0"
-    readonly property color textSecondary: "#B8C2E0"
-    readonly property color textMuted: "#94A3B8"
-    readonly property color textPlaceholder: "#7C8AB0"
-    readonly property color textInfo: "#93C5FD"
-    readonly property color textSuccess: "#A7F3D0"
-    readonly property color textError: "#FCA5A5"
-    readonly property color textSuccessDark: "#052E16"
-    readonly property color textErrorDark: "#7F1D1D"
-    readonly property color textLog: "#C7D2FE"
-
-    // Theme Colors - Step Indicator
-    readonly property color stepInactive: "#2A3756"
-
-    // Theme Colors - Dialog/Button
-    readonly property color buttonSecondary: "#374151"
-    readonly property color shimmerLight: "#BFE8FF"
-
-    color: bgPrimary
+    color: Theme.bgPrimary
     property bool allowClose: false
     property bool installationComplete: false
     property bool devInstallStart: false
@@ -363,11 +353,12 @@ Window {
                                 AppButton {
                                     text: installState.installDone ? "Pulled" : "Pull"
                                     visible: AppController.currentStep === 2
-                                    enabled: AppController.installPrereqsDone && !installTimer.running && !installState.installDone && !AppController.dockerPullActive
+                                    loading: installState.awaitingAuth
+                                    loadingText: "Connecting..."
+                                    enabled: AppController.installPrereqsDone && !installTimer.running && !installState.installDone && !AppController.dockerPullActive && !installState.awaitingAuth
                                     onClicked: {
                                         installState.reset()
-                                        installPage.slideIndex = 0
-                                        installState.statusText = "Waiting for Docker pull..."
+                                        installState.statusText = "Authenticating with Docker registry..."
                                         installState.started = false
                                         installState.awaitingAuth = true
                                         AppController.pullDockerImage()
@@ -832,14 +823,6 @@ Window {
                             spacing: 14
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            property int slideIndex: 0
-                            property var slideSources: [
-                                "qrc:/images/ai/image1.jpg",
-                                "qrc:/images/ai/image2.jpg",
-                                "qrc:/images/ai/image3.jpg",
-                                "qrc:/images/ai/image4.jpg",
-                                "qrc:/images/ai/image5.jpg"
-                            ]
 
                             QtObject {
                                 id: installState
@@ -849,6 +832,7 @@ Window {
                                 property bool showLogs: false
                                 property bool useLogProgress: false
                                 property bool cancelPending: false
+                                property bool installFailed: false
                                 property int elapsedMs: 0
                                 property int progressWindowMs: 180000
                                 property real maxProgress: 0.95
@@ -863,6 +847,7 @@ Window {
                                     installDone = false;
                                     started = false;
                                     awaitingAuth = false;
+                                    installFailed = false;
                                     showLogs = false;
                                     useLogProgress = false;
                                     cancelPending = false;
@@ -883,18 +868,6 @@ Window {
                                     var eased = installState.maxProgress * (1 - Math.exp(-t));
                                     installState.progress = Math.min(installState.maxProgress, eased);
                                     installState.statusText = "Pulling Docker image...";
-                                }
-                            }
-
-                            Timer {
-                                id: installSlideTimer
-                                interval: 10000
-                                repeat: true
-                                running: installTimer.running
-                                onTriggered: {
-                                    if (installPage.slideSources.length > 0) {
-                                        installPage.slideIndex = (installPage.slideIndex + 1) % installPage.slideSources.length;
-                                    }
                                 }
                             }
 
@@ -927,11 +900,12 @@ Window {
                                         installTimer.stop()
                                         AppController.clearDockerPullLog()
                                         installState.reset()
-                                        installPage.slideIndex = 0
                                         installState.statusText = "Ready to Pull."
                                         return
                                     }
                                     installTimer.stop()
+                                    installState.awaitingAuth = false
+                                    installState.started = false
                                     installState.progress = ok ? 1.0 : installState.progress
                                     installState.statusText = ok ? message : "Failed to pull docker image."
                                     installState.installDone = ok
@@ -941,13 +915,18 @@ Window {
                                 function onInstallPrereqsRunningChanged() {
                                     if (AppController.installPrereqsRunning) {
                                         installState.showLogs = true
+                                        installState.installFailed = false
                                         installState.statusText = "Installing Docker and NVIDIA Container Toolkit..."
                                     } else if (!AppController.installPrereqsDone && !installState.started) {
-                                        installState.statusText = "Ready to Install."
+                                        // Install finished but not done = failed
+                                        installState.installFailed = true
+                                        installState.showLogs = true  // Keep logs visible to show error
+                                        installState.statusText = "Installation failed. Check the log for details."
                                     }
                                 }
                                 function onInstallPrereqsDoneChanged() {
                                     if (AppController.installPrereqsDone) {
+                                        installState.installFailed = false
                                         installState.statusText = "Ready to Pull."
                                     }
                                 }
@@ -960,7 +939,9 @@ Window {
                                     ? (installState.started || installState.awaitingAuth
                                         ? "Pulling docker image for installation."
                                         : "Docker and NVIDIA Container Toolkit installed.")
-                                    : "Install Docker and NVIDIA Container Toolkit"
+                                    : (installState.installFailed
+                                        ? "Installation failed. Check the log and try again."
+                                        : "Install Docker and NVIDIA Container Toolkit")
                                 contentItem: ColumnLayout {
                                     spacing: 12
 
@@ -1017,30 +998,18 @@ Window {
                                         text: installState.pullErrorMessage
                                     }
 
-                                    AppButton {
-                                        text: installState.showLogs ? "Hide Logs" : "Show Logs"
-                                        enabled: AppController.installPrereqsRunning
-                                            || AppController.installPrereqsDone
-                                            || installState.started
-                                            || installState.awaitingAuth
-                                        visible: installState.pullErrorMessage.length === 0
-                                        onClicked: installState.showLogs = !installState.showLogs
-                                        accent: root.accent
-                                        implicitWidth: 110
-                                        implicitHeight: 34
-                                    }
-
                                     Item {
                                         id: pullSwap
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 300
                                         implicitHeight: 300
-                                        Layout.bottomMargin: 12
+                                        Layout.bottomMargin: 8
                                         visible: installState.pullErrorMessage.length === 0
                                             && (installState.started
                                                 || installState.awaitingAuth
                                                 || AppController.installPrereqsRunning
-                                                || AppController.installPrereqsDone)
+                                                || AppController.installPrereqsDone
+                                                || installState.installFailed)
 
                                         Rectangle {
                                             id: dockerLogPanel
@@ -1050,9 +1019,6 @@ Window {
                                             border.color: "#2D3B5F"
                                             border.width: 1
                                             clip: true
-                                            opacity: installState.showLogs ? 1 : 0
-                                            enabled: installState.showLogs
-                                            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                                             property bool stickToBottom: true
                                             function updateStickState() {
                                                 if (!dockerLogFlickable)
@@ -1186,16 +1152,6 @@ Window {
                                             }
                                             Component.onCompleted: scrollToBottom()
                                         }
-
-                                        Image {
-                                            anchors.fill: parent
-                                            fillMode: Image.Stretch
-                                            source: installPage.slideSources.length
-                                                ? installPage.slideSources[installPage.slideIndex]
-                                                : ""
-                                            opacity: installState.showLogs ? 0 : 1
-                                            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                                        }
                                     }
                                 }
                             }
@@ -1277,7 +1233,7 @@ Window {
                     closePolicy: Popup.NoAutoClose
                     title: "Quit Installer"
                     anchors.centerIn: parent
-                    implicitWidth: 380
+                    implicitWidth: 650
                     implicitHeight: header.height + contentItem.implicitHeight + 24
                     header: Rectangle {
                         height: 44
@@ -1342,12 +1298,16 @@ Window {
                                     text: "No"
                                     enabled: true
                                     accent: root.buttonSecondary
+                                    implicitWidth: 120
+                                    implicitHeight: 44
                                     onClicked: quitDialog.close()
                                 }
                                 AppButton {
                                     text: "Yes"
                                     enabled: true
                                     accent: root.accent
+                                    implicitWidth: 120
+                                    implicitHeight: 44
                                     onClicked: {
                                         quitDialog.close()
                                         root.allowClose = true
@@ -1367,7 +1327,7 @@ Window {
                     closePolicy: Popup.NoAutoClose
                     title: "Cancel Operation"
                     anchors.centerIn: parent
-                    implicitWidth: 380
+                    implicitWidth: 650
                     implicitHeight: header.height + contentItem.implicitHeight + 24
                     header: Rectangle {
                         height: 44
@@ -1416,12 +1376,16 @@ Window {
                                     text: "No"
                                     enabled: true
                                     accent: root.buttonSecondary
+                                    implicitWidth: 120
+                                    implicitHeight: 44
                                     onClicked: cancelDialog.close()
                                 }
                                     AppButton {
                                         text: "Yes"
                                         enabled: true
                                         accent: root.accentError
+                                        implicitWidth: 120
+                                        implicitHeight: 44
                                         onClicked: {
                                             cancelDialog.close()
                                             if (AppController.installPrereqsRunning) {

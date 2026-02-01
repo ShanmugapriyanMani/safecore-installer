@@ -6,7 +6,7 @@ Rectangle {
     id: btn
     property string text: ""
     property string iconText: ""
-    property color accent: "#6EE7FF"
+    property color accent: Theme.accent
     property bool loading: false
     property string loadingText: "Loading..."
     property bool hovered: false
@@ -20,12 +20,12 @@ Rectangle {
 
     color: enabled
         ? (hovered ? Qt.lighter(accent, 1.08) : accent)
-        : "#1B2440"
+        : Theme.buttonDisabled
     opacity: enabled ? 1.0 : 0.55
 
     border.color: enabled
         ? (hovered ? Qt.darker(accent, 1.15) : Qt.darker(accent, 1.3))
-        : "#2A3557"
+        : Theme.buttonDisabledBorder
     border.width: 1
 
     MouseArea {
