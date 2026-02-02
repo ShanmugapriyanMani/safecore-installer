@@ -1518,7 +1518,9 @@ void AppController::startDockerPullProcess(bool resetStatus)
         const QString command = QString("sg docker -c 'docker pull %1'").arg(image);
         m_dockerProcess->start(scriptPath, {"-q", "-e", "-c", command, "/dev/null"});
     } else {
-        m_dockerProcess->start("docker", {"pull", image});
+        // Fallback: use sg docker -c via bash
+        const QString command = QString("sg docker -c 'docker pull %1'").arg(image);
+        m_dockerProcess->start("bash", {"-c", command});
     }
 }
 
@@ -1708,7 +1710,8 @@ void AppController::runDockerContainer()
             });
 
     setStatus("Running Docker container...");
-    m_runProcess->start("docker", QStringList{"run", "--rm", "--stop-timeout=1", AppConstants::DockerImage});
+    const QString runCmd = QString("sg docker -c 'docker run --rm --stop-timeout=1 %1'").arg(AppConstants::DockerImage);
+    m_runProcess->start("bash", {"-c", runCmd});
 }
 
 void AppController::runDockerOps()
@@ -2315,7 +2318,8 @@ void AppController::startDockerOpsLogs()
                     m_dockerOpsLogsProcess = nullptr;
             });
 
-    m_dockerOpsLogsProcess->start("docker", {"logs", "-f", AppConstants::ContainerName});
+    const QString logsCmd = QString("sg docker -c 'docker logs -f %1'").arg(AppConstants::ContainerName);
+    m_dockerOpsLogsProcess->start("bash", {"-c", logsCmd});
 }
 
 void AppController::stopDockerOpsLogs()

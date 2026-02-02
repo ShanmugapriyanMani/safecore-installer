@@ -1,9 +1,0 @@
--rootPath
-/home/sandy/Documents/v1.0/safecore-installer
--cmake-output
--output-file
-/home/sandy/Documents/v1.0/safecore-installer/build/.qt/qml_imports/ai_box_installer_build.cmake
--importPath
-/home/sandy/Documents/v1.0/safecore-installer/build
--importPath
-/home/sandy/Qt/6.10.1/gcc_64/qml
