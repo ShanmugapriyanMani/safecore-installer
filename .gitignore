@@ -1,0 +1,38 @@
+# Build directories
+build/
+build-deb/
+_CPack_Packages/
+
+# Build artifacts
+*.deb
+*.o
+*.so
+*.a
+
+# Qt build files
+*.autosave
+*.user
+*.pro.user*
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+install_manifest.txt
+
+# Temporary files
+*.tmp
+*.bak
+.DS_Store

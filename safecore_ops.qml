@@ -77,6 +77,7 @@ Window {
 
         // Enhanced background with gradient
         background: Rectangle {
+            radius: 16
             gradient: Gradient {
                 GradientStop { position: 0.0; color: "#0A0F1C" }
                 GradientStop { position: 0.5; color: "#0E1730" }
@@ -88,6 +89,7 @@ Window {
             // Subtle overlay
             Rectangle {
                 anchors.fill: parent
+                radius: 16
                 color: "#050811"
                 opacity: 0.3
             }
@@ -272,7 +274,7 @@ Window {
                                     if (AppController.dockerOpsRunning) {
                                         repairDialog.open()
                                     } else {
-                                        AppController.runDockerOps()
+                                        AppController.runDockerOps(false)  // Don't remove volumes on repair
                                     }
                                 }
                             }
@@ -771,7 +773,7 @@ Window {
                         width: 40
                         height: 40
                         radius: 8
-                        color: AppController.dockerOpsRunning ? "#22C55E15" : "#64748B15"
+                        color: AppController.dockerOpsRunning ? "#22C55E15" : "#0A1022"
                         border.color: AppController.dockerOpsRunning ? "#22C55E" : "#64748B"
                         border.width: 1
 
@@ -1617,7 +1619,7 @@ Window {
                         implicitHeight: 44
                         onClicked: {
                             upgradeDialog.close()
-                            AppController.runDockerOps()
+                            AppController.runDockerOps(true)  // Remove volumes after upgrade
                         }
                     }
                 }

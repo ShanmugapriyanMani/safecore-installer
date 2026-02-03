@@ -141,13 +141,25 @@ Window {
                         }
 
                     Text {
-                        text: "Guided setup for registration and installation\nwith Docker, env variables, and AI models."
+                        // text: "Guided setup for registration and installation\nwith Docker, env variables, and AI models."
+                        text: "Complete AI-powered system setup in just a few \nsimple steps"
                         wrapMode: Text.WordWrap
                         color: root.textSecondary
                         font.pixelSize: 13
                     }
 
-                    Rectangle { Layout.fillWidth: true; height: 1; color: root.borderPrimary }
+                    // Stylish separator
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 2
+                        radius: 1
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.5; color: "#2D3B5F" }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
 
                     StepRow {
                         title: "Welcome"
@@ -183,6 +195,30 @@ Window {
                         done: AppController.currentStep === 3 && !AppController.busy
                         indexText: "4"
                         accent: root.accent
+                    }
+
+                    Item { Layout.fillHeight: true }
+
+                    // Stylish separator
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 2
+                        radius: 1
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.5; color: "#2D3B5F" }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "SafeCore Installer v1.0"
+                        font.pixelSize: 11
+                        color: root.textMuted
+                        horizontalAlignment: Text.AlignHCenter
                     }
 
                 }
@@ -393,17 +429,22 @@ Window {
                                 }
                                 onClicked: {
                                     if (AppController.currentStep === 3) {
-                                        const serviceOk = AppController.installDockerService(false)
-                                        if (!serviceOk)
-                                            return
+                                        // Skip service installation - Docker's --restart unless-stopped
+                                        // combined with systemctl enable docker handles auto-start on boot
+
                                         if (launchCheck.checked) {
+                                            console.log("Launching Docker Ops app with auto-run...")
                                             const ok = AppController.launchDockerOpsApp(true)
                                             if (ok) {
+                                                console.log("Docker Ops launched, closing installer")
                                                 root.allowClose = true
                                                 Qt.quit()
+                                            } else {
+                                                console.log("Failed to launch Docker Ops:", AppController.status)
                                             }
                                             return
                                         }
+                                        console.log("Checkbox not checked, just quitting")
                                         root.allowClose = true
                                         Qt.quit()
                                     } else if (AppController.currentStep === 0) {
@@ -441,27 +482,116 @@ Window {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
 
-                            AppCard {
+                            Rectangle {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 220
-                                title: "Welcome to the SafeCore Online Installer"
-                                subtitle: "Get ready to install Safecore on this device."
-                                contentItem: ColumnLayout {
-                                    spacing: 12
+                                Layout.preferredHeight: 240
+                                radius: Theme.cardRadius
+                                color: Theme.bgLog
+                                border.width: 1
+                                border.color: Theme.borderPrimary
 
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 24
+                                    spacing: 16
+
+                                    // Header with accent line
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        Rectangle {
+                                            Layout.preferredWidth: 4
+                                            Layout.preferredHeight: 40
+                                            radius: 2
+                                            gradient: Gradient {
+                                                GradientStop { position: 0.0; color: root.accent }
+                                                GradientStop { position: 1.0; color: root.accent2 }
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            Text {
+                                                text: "Welcome to SafeCore Installer"
+                                                font.pixelSize: 17
+                                                font.weight: Font.Bold
+                                                color: root.textPrimary
+                                                font.letterSpacing: 0.3
+                                            }
+
+                                            Text {
+                                                text: "Get ready to install SafeCore on this device"
+                                                font.pixelSize: 13
+                                                color: root.textSecondary
+                                                lineHeight: 1.4
+                                            }
+                                        }
+                                    }
+
+                                    // Stylish divider
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        height: 2
+                                        radius: 1
+                                        gradient: Gradient {
+                                            orientation: Gradient.Horizontal
+                                            GradientStop { position: 0.0; color: "transparent" }
+                                            GradientStop { position: 0.5; color: "#2D3B5F" }
+                                            GradientStop { position: 1.0; color: "transparent" }
+                                        }
+                                    }
+
+                                    // Description
                                     Text {
                                         Layout.fillWidth: true
                                         wrapMode: Text.WordWrap
                                         color: root.textSecondary
-                                        text: "This setup will guide you through registration and installation."
+                                        font.pixelSize: 13
+                                        text: "This guided setup will walk you through the complete installation process."
+                                        lineHeight: 1.4
                                     }
-                                    Text {
+
+                                    // Feature list
+                                    ColumnLayout {
                                         Layout.fillWidth: true
-                                        wrapMode: Text.WordWrap
-                                        color: root.textInfo
-                                        text: "What to expect:\n• Validate MAC/Tenant and generate a key\n• Install Docker and fetch env variables\n• Download required AI models"
+                                        spacing: 8
+
+                                        Repeater {
+                                            model: [
+                                                "Validate MAC/Tenant ID and generate a registration key",
+                                                "Install Docker and pull the SafeCore image",
+                                                "Launch and run SafeCore with AI-powered features"
+                                            ]
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 10
+
+                                                Rectangle {
+                                                    width: 4
+                                                    height: 4
+                                                    radius: 2
+                                                    color: root.accent
+                                                    Layout.alignment: Qt.AlignTop
+                                                    Layout.topMargin: 8
+                                                }
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: modelData
+                                                    font.pixelSize: 13
+                                                    color: root.textInfo
+                                                    wrapMode: Text.WordWrap
+                                                    lineHeight: 1.5
+                                                }
+                                            }
+                                        }
                                     }
-                                    
+
+                                    Item { Layout.fillHeight: true }
                                 }
                             }
 
@@ -938,7 +1068,9 @@ Window {
                                 subtitle: AppController.installPrereqsDone
                                     ? (installState.started || installState.awaitingAuth
                                         ? "Pulling docker image for installation."
-                                        : "Docker and NVIDIA Container Toolkit installed.")
+                                        : (installState.installDone
+                                            ? "Docker image pulled successfully."
+                                            : "Docker and NVIDIA Container Toolkit installed."))
                                     : (installState.installFailed
                                         ? "Installation failed. Check the log and try again."
                                         : "Install Docker and NVIDIA Container Toolkit")
@@ -1065,13 +1197,13 @@ Window {
                                                     spacing: 8
 
                                                     Text {
-                                                        text: (installState.started || installState.awaitingAuth) ? "🐳" : "⚙"
+                                                        text: (installState.started || installState.awaitingAuth || installState.installDone) ? "🐳" : "⚙"
                                                         color: "#6EE7FF"
                                                         font.pixelSize: 14
                                                     }
 
                                                     Text {
-                                                        text: (installState.started || installState.awaitingAuth) ? "Docker Pull Log" : "Installation Log"
+                                                        text: (installState.started || installState.awaitingAuth || installState.installDone) ? "Docker Pull Log" : "Installation Log"
                                                         color: "#93C5FD"
                                                         font.pixelSize: 11
                                                         font.weight: Font.Medium
@@ -1126,7 +1258,7 @@ Window {
 
                                                 TextArea {
                                                     id: dockerLogText
-                                                    text: (installState.started || installState.awaitingAuth)
+                                                    text: (installState.started || installState.awaitingAuth || installState.installDone)
                                                         ? (AppController.dockerPullLog.length ? AppController.dockerPullLog : "Waiting for docker output...")
                                                         : (AppController.installPrereqsLog.length
                                                             ? AppController.installPrereqsLog
