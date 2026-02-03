@@ -129,7 +129,7 @@ public:
     Q_INVOKABLE void clearInstallPrereqsLog();
     void resetLocalState();
     Q_INVOKABLE void runDockerContainer();
-    Q_INVOKABLE void runDockerOps();
+    Q_INVOKABLE void runDockerOps(bool removeVolumes = false);
     Q_INVOKABLE void restartDockerOps();
     Q_INVOKABLE void stopDockerOps();
     Q_INVOKABLE void startDockerOpsLogs();

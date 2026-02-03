@@ -26,10 +26,10 @@ else
 fi
 
 # Add user to docker group
-echo "Adding $TARGET_USER to docker group..."
+echo "Adding $TARGET_USER to docker group..."                                                                                                                                                                                                         
 usermod -aG docker "$TARGET_USER" || true
 
-echo -e "\n${GREEN}[2/2] Checking NVIDIA Container Toolkit...${NC}"
+echo -e "\n${GREEN}[2/2] Checking NVIDIA Container Toolkit...${NC}"                                   
 if ! dpkg -l | grep -q nvidia-container-toolkit; then
   echo "Installing NVIDIA Container Toolkit..."
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null || true
@@ -50,10 +50,11 @@ for repo in /etc/apt/sources.list.d/*.disabled; do
   [ -f "$repo" ] && mv "$repo" "${repo%.disabled}" 2>/dev/null
 done
 
-# Always restart Docker to apply group and runtime changes
-echo -e "\n${YELLOW}Restarting Docker service...${NC}"
+# Enable Docker to start on boot and restart to apply group and runtime changes
+echo -e "\n${YELLOW}Enabling and restarting Docker service...${NC}"
+systemctl enable docker
 systemctl restart docker
-echo "Docker service restarted."
+echo "Docker service enabled and restarted."
 
 echo -e "\n${GREEN}Installation complete!${NC}"
 echo -e "${YELLOW}Note: You may need to log out and back in for docker group changes to take effect.${NC}"

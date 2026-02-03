@@ -405,6 +405,31 @@ void AppController::appendDockerPullLog(const QString &chunk)
         }
         if (!layerId.isEmpty())
             m_dockerPullLastLayerId = layerId;
+        
+        // Format line for better column alignment
+        if (!layerId.isEmpty() && isProgressLine) {
+            // Extract components: layerId: Status [progress] size
+            const int colonIdx = line.indexOf(':');
+            if (colonIdx >= 0) {
+                QString remainder = line.mid(colonIdx + 1).trimmed();
+                QString status, progress;
+                
+                const int bracketIdx = remainder.indexOf('[');
+                if (bracketIdx > 0) {
+                    status = remainder.left(bracketIdx).trimmed();
+                    progress = remainder.mid(bracketIdx);
+                } else {
+                    status = remainder;
+                }
+                
+                // Format with fixed widths: layerId (13 chars) : status (22 chars) progress
+                line = QString("%1: %-22s%3")
+                    .arg(layerId, 13)
+                    .arg(status.toUtf8().constData())
+                    .arg(progress);
+            }
+        }
+        
         if (!layerId.isEmpty()) {
             const int existingIndex = m_dockerPullLineIndex.value(layerId, -1);
             if (existingIndex >= 0 && existingIndex < m_dockerPullLines.size()) {
@@ -1714,7 +1739,7 @@ void AppController::runDockerContainer()
     m_runProcess->start("bash", {"-c", runCmd});
 }
 
-void AppController::runDockerOps()
+void AppController::runDockerOps(bool removeVolumes)
 {
     if (m_dockerOpsStarting)
         return;
@@ -1739,11 +1764,13 @@ void AppController::runDockerOps()
         removeProcess.waitForFinished(15000);
     }
 
-    // Remove aibox_weapons volume before creating new container with upgraded image
-    QProcess removeVolumeProcess;
-    removeVolumeProcess.start("bash", {"-lc",
-        "sg docker -c 'docker volume rm aibox_weapons 2>/dev/null'"});
-    removeVolumeProcess.waitForFinished(10000);
+    // Remove aibox_weapons volume only when upgrading (to get fresh models)
+    if (removeVolumes) {
+        QProcess removeVolumeProcess;
+        removeVolumeProcess.start("bash", {"-lc",
+            "sg docker -c 'docker volume rm aibox_weapons 2>/dev/null'"});
+        removeVolumeProcess.waitForFinished(10000);
+    }
 
     auto readJsonFile = [](const QString &path, QJsonObject &outObj) -> bool {
         QFile file(path);
@@ -2355,55 +2382,188 @@ bool AppController::installDockerService(bool startNow)
         return false;
     }
 
-    const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    if (configRoot.isEmpty()) {
-        setStatus("Unable to locate user config directory.");
+    // Read registration and tenant data for environment variables
+    auto readJsonFile = [](const QString &path, QJsonObject &outObj) -> bool {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly))
+            return false;
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        if (!doc.isObject())
+            return false;
+        outObj = doc.object();
+        return true;
+    };
+
+    const QString basePath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/SafeCore/data";
+    QJsonObject registrationObj;
+    QJsonObject tenantObj;
+    
+    if (!readJsonFile(basePath + "/registration_data.json", registrationObj)) {
+        setStatus("Missing registration data. Run registration first.");
+        return false;
+    }
+    if (!readJsonFile(basePath + "/tenant_data.json", tenantObj)) {
+        setStatus("Missing tenant data. Run registration first.");
         return false;
     }
 
-    QDir dir;
-    const QString serviceDir = configRoot + "/systemd/user";
-    if (!dir.mkpath(serviceDir)) {
-        setStatus("Unable to create systemd user directory.");
+    // Extract registration data
+    const QString tenantId = registrationObj.value("tenantId").toString().trimmed();
+    const QString macId = registrationObj.value("macId").toString().trimmed();
+    if (tenantId.isEmpty() || macId.isEmpty()) {
+        setStatus("Registration data is incomplete.");
+        return false;
+    }
+
+    // Extract tenant data (nested under "data" key)
+    const QJsonObject tenantData = tenantObj.value("data").toObject();
+    QString domain = tenantData.value("domain").toString().trimmed();
+    if (!domain.isEmpty())
+        domain = domain.toUpper();
+
+    // Find safeCoreBoxId by matching MAC in safeCores array
+    QString safeCoreBoxId;
+    const QJsonArray safeCores = tenantData.value("safeCores").toArray();
+    const QString targetMac = macId.toLower();
+    for (const QJsonValue &value : safeCores) {
+        const QJsonObject obj = value.toObject();
+        const QString entryMac = obj.value("macId").toString().trimmed().toLower();
+        if (!entryMac.isEmpty() && entryMac == targetMac) {
+            safeCoreBoxId = obj.value("safeCoreBoxId").toString().trimmed();
+            break;
+        }
+    }
+    if (safeCoreBoxId.isEmpty() && !safeCores.isEmpty())
+        safeCoreBoxId = safeCores.first().toObject().value("safeCoreBoxId").toString().trimmed();
+
+    if (safeCoreBoxId.isEmpty() || domain.isEmpty()) {
+        setStatus("Tenant data is missing SafeCoreBoxId or domain.");
+        return false;
+    }
+
+    // Build API URL from service base URL
+    const QString serviceUrl = m_serviceBaseUrl.trimmed();
+    QUrl baseUrl(serviceUrl);
+    if (!baseUrl.isValid() || baseUrl.scheme().isEmpty() || baseUrl.host().isEmpty()) {
+        setStatus("Service URL is invalid.");
+        return false;
+    }
+    const QString tenantEndpoint = AppConstants::TenantEndpoint;
+    QString apiUrl;
+    if (baseUrl.path().endsWith(tenantEndpoint)) {
+        apiUrl = baseUrl.toString(QUrl::None);
+    } else {
+        QString path = baseUrl.path();
+        if (path.endsWith('/'))
+            path.chop(1);
+        baseUrl.setPath(path + tenantEndpoint);
+        apiUrl = baseUrl.toString(QUrl::None);
+    }
+
+    if (m_tenantAccessKey.isEmpty()) {
+        setStatus("Missing tenant access key.");
+        return false;
+    }
+
+    // Get current user info
+    const QString userName = QString::fromUtf8(qgetenv("USER"));
+    if (userName.isEmpty()) {
+        setStatus("Unable to determine current user.");
         return false;
     }
 
     const QString serviceName = AppConstants::ServiceName;
-    const QString servicePath = serviceDir + "/" + serviceName;
     const QString image = AppConstants::DockerImage;
     const QString containerName = AppConstants::ContainerName;
-
-    QFile serviceFile(servicePath);
+    
+    // Create temporary service file
+    const QString tempServicePath = QString("/tmp/%1").arg(serviceName);
+    QFile serviceFile(tempServicePath);
     if (!serviceFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-        setStatus("Unable to write systemd service file.");
+        setStatus("Unable to write temporary service file.");
         return false;
     }
+
+    // Build the full docker run command with all parameters
+    QString dockerRunCmd = dockerPath;
+    dockerRunCmd += " run -d --name " + containerName;
+    dockerRunCmd += " --restart unless-stopped";
+    dockerRunCmd += " --gpus all";
+    
+    // Add ports
+    for (const QString &port : AppConstants::ContainerPorts)
+        dockerRunCmd += " -p " + port;
+    
+    // Add volumes
+    for (const QString &volume : AppConstants::ContainerVolumes)
+        dockerRunCmd += " -v " + volume;
+    
+    // Add NVIDIA driver capabilities
+    dockerRunCmd += " -e NVIDIA_DRIVER_CAPABILITIES=" + AppConstants::NvidiaDriverCapabilities;
+    
+    // Add environment variables (properly escaped for systemd)
+    auto escapeForSystemd = [](const QString &val) -> QString {
+        QString escaped = val;
+        escaped.replace("\"", "\\\"");
+        escaped.replace("$", "\\$");
+        return escaped;
+    };
+    
+    dockerRunCmd += " -e \"CONFIG_API_URL=" + escapeForSystemd(apiUrl) + "\"";
+    dockerRunCmd += " -e \"CONFIG_API_ACCESS_KEY=" + escapeForSystemd(m_tenantAccessKey) + "\"";
+    dockerRunCmd += " -e \"SafeCoreBoxId=" + escapeForSystemd(safeCoreBoxId) + "\"";
+    dockerRunCmd += " -e \"TENANT_ID=" + escapeForSystemd(tenantId) + "\"";
+    dockerRunCmd += " -e \"DOMAIN=" + escapeForSystemd(domain) + "\"";
+    
+    dockerRunCmd += " " + image;
 
     QTextStream out(&serviceFile);
     out << "[Unit]\n";
     out << "Description=SafeCore Docker Service\n";
-    out << "After=network-online.target\n";
+    out << "After=docker.service network-online.target\n";
+    out << "Requires=docker.service\n";
     out << "Wants=network-online.target\n\n";
     out << "[Service]\n";
-    out << "Type=simple\n";
+    out << "Type=forking\n";
+    out << "User=" << userName << "\n";
+    out << "Group=docker\n";
     out << "ExecStartPre=-" << dockerPath << " rm -f " << containerName << "\n";
-    out << "ExecStart=" << dockerPath << " run --name " << containerName << " " << image << "\n";
+    out << "ExecStart=" << dockerRunCmd << "\n";
     out << "ExecStop=" << dockerPath << " stop " << containerName << "\n";
-    out << "Restart=always\n";
-    out << "RestartSec=2\n\n";
+    out << "Restart=on-failure\n";
+    out << "RestartSec=10\n\n";
     out << "[Install]\n";
-    out << "WantedBy=default.target\n";
+    out << "WantedBy=multi-user.target\n";
     serviceFile.close();
 
-    auto runSystemctl = [this](const QStringList &args, QString *errorOut) -> bool {
+    // Copy to system directory and enable using pkexec
+    const QString systemServicePath = "/etc/systemd/system/" + serviceName;
+    
+    QProcess copyProcess;
+    copyProcess.start("pkexec", {"cp", tempServicePath, systemServicePath});
+    if (!copyProcess.waitForStarted(3000) || !copyProcess.waitForFinished(10000) || copyProcess.exitCode() != 0) {
+        setStatus("Failed to copy service file to system directory.");
+        QFile::remove(tempServicePath);
+        return false;
+    }
+
+    // Set proper permissions
+    QProcess chmodProcess;
+    chmodProcess.start("pkexec", {"chmod", "644", systemServicePath});
+    chmodProcess.waitForFinished(5000);
+
+    // Remove temp file
+    QFile::remove(tempServicePath);
+
+    auto runSystemctl = [](const QStringList &args, QString *errorOut) -> bool {
         QProcess proc;
         proc.setProcessChannelMode(QProcess::MergedChannels);
-        proc.start("systemctl", QStringList() << "--user" << args);
+        proc.start("pkexec", QStringList() << "systemctl" << args);
         if (!proc.waitForStarted(3000)) {
             if (errorOut) *errorOut = "Failed to start systemctl.";
             return false;
         }
-        proc.waitForFinished(10000);
+        proc.waitForFinished(15000);
         const QString output = QString::fromUtf8(proc.readAll()).trimmed();
         if (proc.exitStatus() != QProcess::NormalExit || proc.exitCode() != 0) {
             if (errorOut) *errorOut = output.isEmpty() ? "systemctl failed." : output;
@@ -2418,14 +2578,16 @@ bool AppController::installDockerService(bool startNow)
         return false;
     }
 
-    QStringList enableArgs = {"enable"};
-    if (startNow)
-        enableArgs << "--now";
-    enableArgs << serviceName;
-
-    if (!runSystemctl(enableArgs, &error)) {
+    if (!runSystemctl({"enable", serviceName}, &error)) {
         setStatus("Failed to enable service: " + error);
         return false;
+    }
+
+    if (startNow) {
+        if (!runSystemctl({"start", serviceName}, &error)) {
+            setStatus("Failed to start service: " + error);
+            return false;
+        }
     }
 
     setStatus(startNow ? "SafeCore service started." : "SafeCore service installed.");
